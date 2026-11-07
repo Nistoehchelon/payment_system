@@ -2,6 +2,7 @@ use payment_system_structs::{CallbackHeaders, PaymentId};
 use sqlx::PgConnection;
 pub mod macros_400;
 pub mod poll_payments;
+pub mod litecoin;
 
 async fn fetch_callback_headers(
     conn: &mut PgConnection,
