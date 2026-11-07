@@ -24,3 +24,7 @@ async fn get_balance(_address: &str) -> anyhow::Result<LTCAtomicUnit> {
     // TODO: Contact an API, say, Litecoinspace and filter results... Either for confirmed balance or any...
     todo!()
 }
+
+pub async fn sweep_balance() {
+    todo!()
+}

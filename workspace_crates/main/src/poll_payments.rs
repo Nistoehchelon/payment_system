@@ -4,7 +4,7 @@ use payment_system_structs::{Payment, PaymentId, PaymentSystemConfig};
 use sqlx::postgres::types::PgInterval;
 use tokio_util::sync::CancellationToken;
 
-use crate::{fetch_callback_headers, monero::{self}};
+use crate::{fetch_callback_headers, litecoin, monero::{self}};
 
 
 
@@ -98,7 +98,23 @@ pub async fn poll_payments(
                     }
                 }
                 "litecoin" => {
-                    
+                     let Ok(received) = litecoin::check_payment(
+                        db_pool.clone(),
+                        &payment,
+                        &rpc,
+                        &payment_system_config,
+                    )
+                    .await else {
+                        continue;
+                    };
+                    match received {
+                        false => continue,
+                        true => {
+                            litecoin::sweep_balance().await
+                            // Next: mark invoice as paid
+                            // That's it, right?
+                        }
+                    }
                 },
                 _ => continue,
             }
