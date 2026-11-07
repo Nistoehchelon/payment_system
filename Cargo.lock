@@ -348,7 +348,7 @@ dependencies = [
 [[package]]
 name = "config_reader"
 version = "0.1.0"
-source = "git+ssh://git@github.com/Nistoehchelonmneugaphy/server_2_only.git#001918c59a7973b89a2010d0c361b919db1be9d3"
+source = "git+ssh://git@github.com/Nistoehchelonmneugaphy/server_2_only.git#122e7ca01aec0b46247060ab42cb31dcefe5d16c"
 dependencies = [
  "config",
  "dotenvy",
@@ -696,7 +696,7 @@ dependencies = [
 [[package]]
 name = "encoding"
 version = "0.1.0"
-source = "git+ssh://git@github.com/Nistoehchelonmneugaphy/server_2_only.git#001918c59a7973b89a2010d0c361b919db1be9d3"
+source = "git+ssh://git@github.com/Nistoehchelonmneugaphy/server_2_only.git#122e7ca01aec0b46247060ab42cb31dcefe5d16c"
 dependencies = [
  "urlencoding",
 ]
@@ -745,7 +745,7 @@ dependencies = [
 [[package]]
 name = "error_structs"
 version = "0.1.0"
-source = "git+ssh://git@github.com/Nistoehchelonmneugaphy/server_2_only.git#001918c59a7973b89a2010d0c361b919db1be9d3"
+source = "git+ssh://git@github.com/Nistoehchelonmneugaphy/server_2_only.git#122e7ca01aec0b46247060ab42cb31dcefe5d16c"
 dependencies = [
  "tracing",
 ]
@@ -1138,7 +1138,7 @@ dependencies = [
 [[package]]
 name = "http_stuff"
 version = "0.1.0"
-source = "git+ssh://git@github.com/Nistoehchelonmneugaphy/server_2_only.git#001918c59a7973b89a2010d0c361b919db1be9d3"
+source = "git+ssh://git@github.com/Nistoehchelonmneugaphy/server_2_only.git#122e7ca01aec0b46247060ab42cb31dcefe5d16c"
 dependencies = [
  "config_reader",
  "encoding",
@@ -2321,7 +2321,7 @@ dependencies = [
 [[package]]
 name = "server"
 version = "0.1.0"
-source = "git+ssh://git@github.com/Nistoehchelonmneugaphy/server_2_only.git#001918c59a7973b89a2010d0c361b919db1be9d3"
+source = "git+ssh://git@github.com/Nistoehchelonmneugaphy/server_2_only.git#122e7ca01aec0b46247060ab42cb31dcefe5d16c"
 dependencies = [
  "config_reader",
  "dotenvy",
@@ -2340,7 +2340,7 @@ dependencies = [
 [[package]]
 name = "server_config"
 version = "0.1.0"
-source = "git+ssh://git@github.com/Nistoehchelonmneugaphy/server_2_only.git#001918c59a7973b89a2010d0c361b919db1be9d3"
+source = "git+ssh://git@github.com/Nistoehchelonmneugaphy/server_2_only.git#122e7ca01aec0b46247060ab42cb31dcefe5d16c"
 dependencies = [
  "humantime-serde",
  "serde",
@@ -3150,7 +3150,7 @@ checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 [[package]]
 name = "url"
 version = "0.1.0"
-source = "git+ssh://git@github.com/Nistoehchelonmneugaphy/server_2_only.git#001918c59a7973b89a2010d0c361b919db1be9d3"
+source = "git+ssh://git@github.com/Nistoehchelonmneugaphy/server_2_only.git#122e7ca01aec0b46247060ab42cb31dcefe5d16c"
 dependencies = [
  "encoding",
  "indexmap",

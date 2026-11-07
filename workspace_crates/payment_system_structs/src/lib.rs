@@ -17,7 +17,7 @@ pub struct PaymentSystemConfig {
     // limit monitoring load
     pub max_active_invoices: u64,
     pub active_invoice_minutes_since_creation: u64,
-    pub master_seed: String,
+    pub litecoin_master_seed: String,
     pub cf_bypass_token_header_name: String,
     pub cf_bypass_token_header_value: String,
     pub confirm_all_for_testing_purposes: bool,
@@ -30,7 +30,7 @@ pub struct Payment {
     pub success_callback: String,
     pub method: String,
     pub address: String,
-    pub amount: String,
+    pub amount: i64,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub completed_at: Option<chrono::DateTime<chrono::Utc>>,
     pub sweeped_at: Option<chrono::DateTime<chrono::Utc>>,

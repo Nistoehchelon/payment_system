@@ -175,7 +175,7 @@ async fn dynamic_address_generation(
     let index = index as u64;
     match m {
         PaymentMethod::Litecoin => {
-            let Ok(address) = derive_ltc_bip84_address(&psc.master_seed, index) else {
+            let Ok(address) = derive_ltc_bip84_address(&psc.litecoin_master_seed, index) else {
                 println!("Litecoin addr error");
                 return Err("Couldn't derive litecoin".to_string());
             };
@@ -294,7 +294,8 @@ impl Router {
                 );
 
                 println!("Invoice: {invoice_req:#?}");
-                let id = ok_or_400!(sqlx::query!("INSERT INTO payments (status_update_callback, success_callback, method, address, amount) VALUES($1, $2, $3, $4, $5) RETURNING id", invoice_req.status_update_callback,  invoice_req.success_callback,  invoice_req.method.to_string(), "to_do", invoice_req.amount_atomic.to_string()).fetch_one(&mut *tx).await, "sqlx error").id;
+                let i64_amount: i64 = ok_or_400!(invoice_req.amount_atomic.try_into());
+                let id = ok_or_400!(sqlx::query!("INSERT INTO payments (status_update_callback, success_callback, method, address, amount) VALUES($1, $2, $3, $4, $5::bigint) RETURNING id", invoice_req.status_update_callback,  invoice_req.success_callback,  invoice_req.method.to_string(), "to_do", i64_amount).fetch_one(&mut *tx).await, "sqlx error").id;
                 for (k, v) in invoice_req.callback_headers.0.iter() {
                     ok_or_400!(sqlx::query!("INSERT INTO callback_headers (payment_id, key, value) VALUES ($1, $2, $3)", id.clone(), k, v, ).execute(&mut *tx).await);
                 }

@@ -46,7 +46,7 @@ pub async fn check_payment(
     .fetch_one(&db_pool)
     .await?
     .monero_payment_id;
-    let expected_amount: u64 = payment.amount.parse()?; // already in piconer
+    let expected_amount: u64 = payment.amount.try_into()?; // already in piconer
     println!(
         "[Payment ID {}] Checking if the expect amount of {expected_amount} piconero was paid to {}",
         payment.id, payment.address
