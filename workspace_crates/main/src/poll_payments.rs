@@ -4,7 +4,7 @@ use payment_system_structs::{Payment, PaymentId, PaymentSystemConfig};
 use sqlx::postgres::types::PgInterval;
 use tokio_util::sync::CancellationToken;
 
-use crate::{fetch_callback_headers, monero::{check_payment, sweep_all}};
+use crate::{fetch_callback_headers, monero::{self}};
 
 
 
@@ -39,7 +39,7 @@ pub async fn poll_payments(
         for payment in payments {
             match payment.method.as_str() {
                 "monero" => {
-                    let Ok(paid) = check_payment(
+                    let Ok(paid) = monero::check_payment(
                         db_pool.clone(),
                         &payment,
                         &rpc,
@@ -53,7 +53,7 @@ pub async fn poll_payments(
                         continue;
                     };
                     if paid || payment_system_config.confirm_all_for_testing_purposes {
-                        let _ = sweep_all(&rpc, &payment_system_config).await;
+                        let _ = monero::sweep_all(&rpc, &payment_system_config).await;
                         let result = sqlx::query!(
                             "UPDATE payments 
                              SET completed_at = NOW() 
