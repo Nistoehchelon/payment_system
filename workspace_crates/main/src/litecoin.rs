@@ -15,13 +15,12 @@ pub async fn check_payment(
     let required_amount: u64 = payment.amount.try_into()?;
     let required_amount = LTCAtomicUnit::from_atomic(required_amount);
     // step 3: if balance is not sufficient, return false
-    if balance < required_amount {
-        return Ok(false);
-    }
-    todo!();
+    let answer =  balance >= required_amount;
+    Ok(answer)
 
 }
 
 async fn get_balance(_address: &str) -> anyhow::Result<LTCAtomicUnit> {
-    Ok(LTCAtomicUnit::from_atomic(1000))
+    // TODO: Contact an API, say, Litecoinspace and filter results... Either for confirmed balance or any...
+    todo!()
 }
