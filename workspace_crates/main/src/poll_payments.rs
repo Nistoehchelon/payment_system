@@ -124,12 +124,6 @@ pub async fn poll_payments(
     }
 }
 
-pub enum CheckMoneroPaymentResult {
-    NotPaid,
-    Paid {
-        unlocked_transaction_ids: Vec<String>,
-    },
-}
 async fn cancellable_sleep(
     duration: Duration,
     cancellation_token: &CancellationToken,
