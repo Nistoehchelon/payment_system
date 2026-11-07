@@ -1,0 +1,9 @@
+{
+  "remote.autoForwardPorts": false,
+  "editor.wordWrap": "on",
+  "rust-analyzer.cargo.extraEnv": {
+    "DATABASE_URL": "postgres://user456:password456@localhost:5432/database456"
+  },
+  "rust-analyzer.check.command": "clippy",
+  "editor.inlayHints.enabled": "on"
+}

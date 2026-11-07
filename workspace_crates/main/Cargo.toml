@@ -1,0 +1,23 @@
+[package]
+name = "main"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+dotenvy = { workspace = true }
+server = { workspace = true }
+sqlx = { workspace = true }
+git-version = { workspace = true }
+app_executable_version = { workspace = true }
+strum = { workspace = true }
+anyhow = { workspace = true }
+payment_system_structs = { workspace = true }
+derive_more = { workspace = true }
+reqwest = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+cryptocurrencies_stuff = { workspace = true }
+tokio-util = { workspace = true }
