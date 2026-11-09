@@ -1,8 +1,16 @@
 use anyhow::{Context, anyhow, bail};
 use bitcoin::{
-    Amount, OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Witness, absolute::LockTime, address::{Address as BitcoinAddress, NetworkChecked, NetworkUnchecked}, bech32::{self, Bech32}, consensus::encode::serialize_hex, hex::HexToArrayError, p2p::Address, transaction::Version,
+    Amount, OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Witness,
+    absolute::LockTime,
+    address::{Address as BitcoinAddress, NetworkChecked, NetworkUnchecked},
+    bech32::{self, Bech32},
+    consensus::encode::serialize_hex,
+    hex::HexToArrayError,
+    p2p::Address,
+    transaction::Version,
 };
 use cryptocurrencies_stuff::{currencies::LTCAtomicUnit, derive_ltc::derive_ltc_bip84_address};
+use outscript::parse_bitcoin_based_address;
 use payment_system_structs::{PaymentSqlxShape, PaymentSystemConfig};
 
 pub async fn check_payment(
@@ -130,7 +138,6 @@ pub async fn get_utxos(address: &str) -> anyhow::Result<Vec<Utxo>> {
     Ok(utxos.into_iter().filter(|u| u.status.confirmed).collect())
 }
 
-use outscript::parse_bitcoin_based_address;
 pub async fn prepare_sweep_tx(
     utxos: Vec<Utxo>,
     destination: payment_system_structs::Address,
@@ -139,7 +146,8 @@ pub async fn prepare_sweep_tx(
     if utxos.is_empty() {
         bail!("No UTXOs to sweep");
     }
-    let script_bytes = parse_bitcoin_based_address("litecoin", &destination.0) .map_err(|e| anyhow!("invalid Litecoin address: {e}"))?;
+    let script_bytes = parse_bitcoin_based_address("litecoin", &destination.0)
+        .map_err(|e| anyhow!("invalid Litecoin address: {e}"))?;
     let dest_script = ScriptBuf::from_bytes(script_bytes.bytes().to_vec());
 
     let inputs: Vec<TxIn> = utxos
@@ -157,16 +165,11 @@ pub async fn prepare_sweep_tx(
             })
         })
         .collect::<anyhow::Result<Vec<_>>>()?;
-    let total_in: u64 = utxos.iter().map(|u| u.value).sum();
-    let arbitrary_number_one = 10;
-    let arbitrary_number_two = 68;
-    let estimated_vsize = arbitrary_number_one
-        + (utxos.len() as u64 * arbitrary_number_two)
-        + dest_script.len() as u64;
-    let fee = fee_per_vbyte
-        .checked_mul_result(LTCAtomicUnit::from_atomic(estimated_vsize))
-        .or_else(|e| bail!("fee overflow"))?;
+    let estimated_vsize = estimate_vsize(utxos.len(), dest_script.len());
+    let fee = calculate_fee(fee_per_vbyte, estimated_vsize)?;
     tracing::debug!("Fee: {}", fee.as_atomic());
+    
+    let total_in: u64 = utxos.iter().map(|u| u.value).sum();
     let output_value = total_in
         .checked_sub(fee.as_atomic())
         .ok_or_else(|| anyhow!("balance {} <  estimated fee {}", total_in, fee.as_atomic()))?;
@@ -183,12 +186,18 @@ pub async fn prepare_sweep_tx(
     Ok(serialize_hex(&tx))
 }
 
-
-pub async fn estimate_transaction_fee_based_tx_bytes(
+fn estimate_vsize(num_inputs: usize, dest_script_len: usize) -> u64 {
+    const TX_OVERHEAD_VBYTES: u64 = 10;
+    const P2WPKH_INPUT_VBYTES: u64 = 68;
+    TX_OVERHEAD_VBYTES + (num_inputs as u64 * P2WPKH_INPUT_VBYTES) + dest_script_len as u64
+}
+pub fn calculate_fee(
     fee_per_vbyte: LTCAtomicUnit,
-    tx: String,
+    estimated_vsize: u64,
 ) -> anyhow::Result<LTCAtomicUnit> {
-    todo!()
+    fee_per_vbyte
+        .checked_mul_result(LTCAtomicUnit::from_atomic(estimated_vsize))
+        .map_err(|e| anyhow!("fee overflow: {e:?}"))
 }
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
