@@ -22,6 +22,8 @@ tracing = { workspace = true }
 cryptocurrencies_stuff = { workspace = true }
 tokio-util = { workspace = true }
 bitcoin = { workspace = true }
+outscript = "0.2.7"
+litecoin = "0.32.8-rc.1"
 
 
 [dev-dependencies]

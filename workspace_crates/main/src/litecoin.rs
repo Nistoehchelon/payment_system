@@ -1,12 +1,6 @@
 use anyhow::{Context, anyhow, bail};
 use bitcoin::{
-    Amount, OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Witness,
-    absolute::LockTime,
-    address::{Address as BitcoinAddress, NetworkChecked, NetworkUnchecked},
-    consensus::encode::serialize_hex,
-    hex::HexToArrayError,
-    p2p::Address,
-    transaction::Version,
+    Amount, OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Witness, absolute::LockTime, address::{Address as BitcoinAddress, NetworkChecked, NetworkUnchecked}, bech32::{self, Bech32}, consensus::encode::serialize_hex, hex::HexToArrayError, p2p::Address, transaction::Version,
 };
 use cryptocurrencies_stuff::{currencies::LTCAtomicUnit, derive_ltc::derive_ltc_bip84_address};
 use payment_system_structs::{PaymentSqlxShape, PaymentSystemConfig};
@@ -136,6 +130,7 @@ pub async fn get_utxos(address: &str) -> anyhow::Result<Vec<Utxo>> {
     Ok(utxos.into_iter().filter(|u| u.status.confirmed).collect())
 }
 
+use outscript::parse_bitcoin_based_address;
 pub async fn prepare_sweep_tx(
     utxos: Vec<Utxo>,
     destination: payment_system_structs::Address,
@@ -144,10 +139,8 @@ pub async fn prepare_sweep_tx(
     if utxos.is_empty() {
         bail!("No UTXOs to sweep");
     }
-    let dest: BitcoinAddress<NetworkUnchecked> =
-        destination.0.parse()?;
-    let dest: BitcoinAddress<NetworkChecked> = dest.require_network(bitcoin::Network::Bitcoin)?;
-    let dest_script = dest.script_pubkey();
+    let script_bytes = parse_bitcoin_based_address("litecoin", &destination.0) .map_err(|e| anyhow!("invalid Litecoin address: {e}"))?;
+    let dest_script = ScriptBuf::from_bytes(script_bytes.bytes().to_vec());
 
     let inputs: Vec<TxIn> = utxos
         .iter()
@@ -187,6 +180,8 @@ pub async fn prepare_sweep_tx(
     };
     Ok(serialize_hex(&tx))
 }
+
+
 pub async fn estimate_transaction_fee_based_tx_bytes(
     fee_per_vbyte: LTCAtomicUnit,
     tx: String,
