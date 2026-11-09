@@ -15,7 +15,7 @@ pub async fn test_litecoin_get_address_balance() {
 #[tokio::test]
 #[test_log::test]
 pub async fn test_litecoin_get_recommended_fees() {
-    let rec_fee = litecoin::get_a_fee_estimate_per_virtual_byte().await.unwrap();
+    let rec_fee = litecoin::get_a_fee_estimate_per_virtual_byte(litecoin::RecommendedFeeType::FastestFee).await.unwrap();
     tracing::info!("Recommended fee: {rec_fee:?}");
 }
 

@@ -62,7 +62,7 @@ pub async fn sweep_balance(
     let from_address =
         derive_ltc_bip84_address(&master_seed, from_index).map_err(|e| anyhow!(e))?;
     let from_balance = get_balance(&from_address).await?;
-    let fee_estimation_per_virtual_byte = get_a_fee_estimate_per_virtual_byte().await?;
+    let fee_estimation_per_virtual_byte = get_a_fee_estimate_per_virtual_byte(RecommendedFeeType::FastestFee).await?;
     let prepared_transaction = prepare_sweep_tx().await?;
     let estimated_fee = estimate_transaction_fee_based_tx_bytes(
         fee_estimation_per_virtual_byte,
@@ -117,11 +117,16 @@ pub struct RecommendedFees {
 }
 #[derive(Debug, Deserialize)]
 pub enum RecommendedFeeType {
-    FastestFee, HalfHourFee, HourFee, EconomyFee, MinimumFee,
+    FastestFee,
+    HalfHourFee,
+    HourFee,
+    EconomyFee,
+    MinimumFee,
 }
 
-
-pub async fn get_a_fee_estimate_per_virtual_byte(fee_type: RecommendedFeeType) -> anyhow::Result<LTCAtomicUnit> {
+pub async fn get_a_fee_estimate_per_virtual_byte(
+    fee_type: RecommendedFeeType,
+) -> anyhow::Result<LTCAtomicUnit> {
     let url = "https://litecoinspace.org/api/v1/fees/recommended";
     let fees: RecommendedFees = reqwest::get(url)
         .await
@@ -132,13 +137,12 @@ pub async fn get_a_fee_estimate_per_virtual_byte(fee_type: RecommendedFeeType) -
         .await
         .context("failed to parse fee response")?;
 
-        let fee = match fee_type {
-            RecommendedFeeType::FastestFee => 
-                fees.fastest_fee,
-            RecommendedFeeType::HalfHourFee => fees.half_hour_fee,
-            RecommendedFeeType::HourFee => fees.hour_fee,
-            RecommendedFeeType::EconomyFee => fees.economy_fee,
-            RecommendedFeeType::MinimumFee => fees.minimum_fee,
-        }
+    let fee = match fee_type {
+        RecommendedFeeType::FastestFee => fees.fastest_fee,
+        RecommendedFeeType::HalfHourFee => fees.half_hour_fee,
+        RecommendedFeeType::HourFee => fees.hour_fee,
+        RecommendedFeeType::EconomyFee => fees.economy_fee,
+        RecommendedFeeType::MinimumFee => fees.minimum_fee,
+    };
     Ok(LTCAtomicUnit::from_atomic(fee))
 }
