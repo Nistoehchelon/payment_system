@@ -1,12 +1,13 @@
 use std::time::Duration;
 
-use payment_system_structs::{Payment, PaymentId, PaymentSystemConfig};
+use payment_system_structs::{PaymentId, PaymentSqlxShape, PaymentSystemConfig};
 use sqlx::postgres::types::PgInterval;
 use tokio_util::sync::CancellationToken;
 
-use crate::{fetch_callback_headers, litecoin, monero::{self}};
-
-
+use crate::{
+    fetch_callback_headers, litecoin,
+    monero::{self},
+};
 
 pub async fn poll_payments(
     db_pool: sqlx::PgPool,
@@ -27,7 +28,7 @@ pub async fn poll_payments(
     loop {
         let db_pool = db_pool.clone();
         let payments = sqlx::query_as!(
-            Payment,
+            PaymentSqlxShape,
             "SELECT * FROM payments  WHERE completed_at IS NULL
        AND created_at > NOW() - $1::interval",
             &interval
@@ -58,7 +59,7 @@ pub async fn poll_payments(
                             "UPDATE payments 
                              SET completed_at = NOW() 
                              WHERE id = $1 
-                             AND completed_at IS NULL", // guard against double update
+                             AND completed_at IS NULL",
                             &payment.id
                         )
                         .execute(&mut *tx)
@@ -98,24 +99,68 @@ pub async fn poll_payments(
                     }
                 }
                 "litecoin" => {
-                     let Ok(received) = litecoin::check_payment(
+                    let Ok(received) = litecoin::check_payment(
                         db_pool.clone(),
                         &payment,
                         &rpc,
                         &payment_system_config,
                     )
-                    .await else {
+                    .await
+                    else {
                         continue;
                     };
                     match received {
                         false => continue,
                         true => {
-                            litecoin::sweep_balance().await
-                            // Next: mark invoice as paid
+                            let Ok(mut tx) = db_pool.begin().await else {
+                                continue;
+                            };
+                            // mark as complete
+                            let _result = sqlx::query!(
+                                "UPDATE payments 
+                             SET completed_at = NOW() 
+                             WHERE id = $1 
+                             AND completed_at IS NULL",
+                                &payment.id
+                            )
+                            .execute(&mut *tx)
+                            .await;
+                            let Ok(headers) =
+                                fetch_callback_headers(&mut tx, PaymentId(payment.id.clone()))
+                                    .await
+                            else {
+                                continue;
+                            };
+
+                            let mut request = rpc.post(&payment.success_callback);
+                            tracing::debug!(
+                                "Sending success_callback {}, payment_id: {}",
+                                payment.success_callback,
+                                payment.id
+                            );
+                            request = request.body(format!("payment_id={}", payment.id));
+                            for (key, value) in &headers.0 {
+                                request = request.header(key, value);
+                            }
+
+                            let resp = match request.send().await {
+                                Ok(resp) => resp,
+                                Err(e) => {
+                                    println!("Callback returned error: {e:#?}");
+                                    continue;
+                                }
+                            };
+                            tracing::debug!(
+                                "Received resp after successful payment request: {:#?}",
+                                resp
+                            );
+
+                            litecoin::sweep_balance().await;
+                            let _ = tx.commit().await;
                             // That's it, right?
                         }
                     }
-                },
+                }
                 _ => continue,
             }
             if cancellable_sleep(

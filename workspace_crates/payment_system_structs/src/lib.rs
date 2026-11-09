@@ -18,12 +18,13 @@ pub struct PaymentSystemConfig {
     pub max_active_invoices: u64,
     pub active_invoice_minutes_since_creation: u64,
     pub litecoin_master_seed: String,
+    pub litecoin_rest_api_url: String,
     pub cf_bypass_token_header_name: String,
     pub cf_bypass_token_header_value: String,
     pub confirm_all_for_testing_purposes: bool,
 }
 
-pub struct Payment {
+pub struct PaymentSqlxShape {
     pub primary_key: i64,
     pub id: String,
     pub status_update_callback: String,

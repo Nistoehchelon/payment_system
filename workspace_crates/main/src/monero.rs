@@ -1,4 +1,4 @@
-use payment_system_structs::{Payment, PaymentSystemConfig};
+use payment_system_structs::{PaymentSqlxShape, PaymentSystemConfig};
 use reqwest::Client;
 
 pub async fn sweep_all(
@@ -35,7 +35,7 @@ pub async fn sweep_all(
 
 pub async fn check_payment(
     db_pool: sqlx::PgPool,
-    payment: &Payment,
+    payment: &PaymentSqlxShape,
     client: &reqwest::Client,
     payment_system_config: &PaymentSystemConfig,
 ) -> anyhow::Result<bool> {
