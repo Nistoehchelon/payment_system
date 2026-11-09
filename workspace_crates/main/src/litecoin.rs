@@ -106,7 +106,39 @@ pub async fn estimate_transaction_fee_based_tx_bytes(
 ) -> anyhow::Result<LTCAtomicUnit> {
     todo!()
 }
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecommendedFees {
+    pub fastest_fee: u64,
+    pub half_hour_fee: u64,
+    pub hour_fee: u64,
+    pub economy_fee: u64,
+    pub minimum_fee: u64,
+}
+#[derive(Debug, Deserialize)]
+pub enum RecommendedFeeType {
+    FastestFee, HalfHourFee, HourFee, EconomyFee, MinimumFee,
+}
 
-pub async fn get_a_fee_estimate_per_virtual_byte() -> anyhow::Result<LTCAtomicUnit> {
-    todo!()
+
+pub async fn get_a_fee_estimate_per_virtual_byte(fee_type: RecommendedFeeType) -> anyhow::Result<LTCAtomicUnit> {
+    let url = "https://litecoinspace.org/api/v1/fees/recommended";
+    let fees: RecommendedFees = reqwest::get(url)
+        .await
+        .context("failed to reach fee endpoint")?
+        .error_for_status()
+        .context("fee endpoint returned an error")?
+        .json()
+        .await
+        .context("failed to parse fee response")?;
+
+        let fee = match fee_type {
+            RecommendedFeeType::FastestFee => 
+                fees.fastest_fee,
+            RecommendedFeeType::HalfHourFee => fees.half_hour_fee,
+            RecommendedFeeType::HourFee => fees.hour_fee,
+            RecommendedFeeType::EconomyFee => fees.economy_fee,
+            RecommendedFeeType::MinimumFee => fees.minimum_fee,
+        }
+    Ok(LTCAtomicUnit::from_atomic(fee))
 }

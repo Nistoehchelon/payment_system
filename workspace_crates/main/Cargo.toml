@@ -21,3 +21,7 @@ chrono = { workspace = true }
 tracing = { workspace = true }
 cryptocurrencies_stuff = { workspace = true }
 tokio-util = { workspace = true }
+
+
+[dev-dependencies]
+test-log = {workspace=true}
