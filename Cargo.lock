@@ -631,7 +631,7 @@ dependencies = [
 [[package]]
 name = "cryptocurrencies_stuff"
 version = "0.1.0"
-source = "git+ssh://git@github.com/Nistoehchelonmneugaphy/cryptocurrencies_stuff.git#0d2d6d3da7a7f675025ec25e92b6b31b4f069b09"
+source = "git+ssh://git@github.com/Nistoehchelonmneugaphy/cryptocurrencies_stuff.git#b4bbb726d85f0ae147ead6a39191aef5c8f40204"
 dependencies = [
  "anyhow",
  "bech32 0.12.0",

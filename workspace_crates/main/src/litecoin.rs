@@ -1,6 +1,12 @@
 use anyhow::{Context, anyhow, bail};
 use bitcoin::{
-    OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Witness, absolute::LockTime, address::{Address as BitcoinAddress, NetworkChecked, NetworkUnchecked}, consensus::encode::serialize_hex, hex::HexToArrayError, p2p::Address, transaction::Version,
+    Amount, OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Witness,
+    absolute::LockTime,
+    address::{Address as BitcoinAddress, NetworkChecked, NetworkUnchecked},
+    consensus::encode::serialize_hex,
+    hex::HexToArrayError,
+    p2p::Address,
+    transaction::Version,
 };
 use cryptocurrencies_stuff::{currencies::LTCAtomicUnit, derive_ltc::derive_ltc_bip84_address};
 use payment_system_structs::{PaymentSqlxShape, PaymentSystemConfig};
@@ -130,35 +136,56 @@ pub async fn get_utxos(address: &str) -> anyhow::Result<Vec<Utxo>> {
     Ok(utxos.into_iter().filter(|u| u.status.confirmed).collect())
 }
 
-pub async fn prepare_sweep_tx(utxos: Vec<Utxo>, destination: Address, fee_per_vbyte: LTCAtomicUnit) -> anyhow::Result<String> {
+pub async fn prepare_sweep_tx(
+    utxos: Vec<Utxo>,
+    destination: payment_system_structs::Address,
+    fee_per_vbyte: LTCAtomicUnit,
+) -> anyhow::Result<String> {
     if utxos.is_empty() {
         bail!("No UTXOs to sweep");
     }
-    let dest: BitcoinAddress<NetworkUnchecked> = "ltc1qp7cnlxmz8wgc93g0m020ckru2s55t25y3wunf6".parse()?;
+    let dest: BitcoinAddress<NetworkUnchecked> =
+        destination.0.parse()?;
     let dest: BitcoinAddress<NetworkChecked> = dest.require_network(bitcoin::Network::Bitcoin)?;
     let dest_script = dest.script_pubkey();
 
     let inputs: Vec<TxIn> = utxos
-    .iter()
-    .map(|u| -> anyhow::Result<TxIn> {
-       let txid = u
-       .txid
-       .parse()
-       .with_context(|| format!("API returned invalid txid: {:?}", u.txid))?;
-    Ok(TxIn { previous_output: OutPoint { txid, vout: u.vout },
-            script_sig: ScriptBuf::new(),
-            sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
-            witness: Witness::new(), })
-    })
-    .collect::<anyhow::Result<Vec<_>>>()?;
-let total_in: u64 = utxos.iter().map(|u| u.value).sum();
-let arbitrary_number_one = 10;
-let arbitrary_number_two = 68;
-let estimated_vsize = arbitrary_number_one + (utxos.len() as u64 * arbitrary_number_two) + dest_script.len() as u64;
-let fee = fee_per_vbyte
-.
-
-    todo!()
+        .iter()
+        .map(|u| -> anyhow::Result<TxIn> {
+            let txid = u
+                .txid
+                .parse()
+                .with_context(|| format!("API returned invalid txid: {:?}", u.txid))?;
+            Ok(TxIn {
+                previous_output: OutPoint { txid, vout: u.vout },
+                script_sig: ScriptBuf::new(),
+                sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+                witness: Witness::new(),
+            })
+        })
+        .collect::<anyhow::Result<Vec<_>>>()?;
+    let total_in: u64 = utxos.iter().map(|u| u.value).sum();
+    let arbitrary_number_one = 10;
+    let arbitrary_number_two = 68;
+    let estimated_vsize = arbitrary_number_one
+        + (utxos.len() as u64 * arbitrary_number_two)
+        + dest_script.len() as u64;
+    let fee = fee_per_vbyte
+        .checked_mul_result(LTCAtomicUnit::from_atomic(estimated_vsize))
+        .or_else(|e| bail!("fee overflow"))?;
+    let output_value = total_in
+        .checked_sub(fee.as_atomic())
+        .ok_or_else(|| anyhow!("balance {} <  estimated fee {}", total_in, fee.as_atomic()))?;
+    let tx = Transaction {
+        version: Version::TWO,
+        lock_time: LockTime::ZERO,
+        input: inputs,
+        output: vec![TxOut {
+            value: Amount::from_sat(output_value),
+            script_pubkey: dest_script,
+        }],
+    };
+    Ok(serialize_hex(&tx))
 }
 pub async fn estimate_transaction_fee_based_tx_bytes(
     fee_per_vbyte: LTCAtomicUnit,
