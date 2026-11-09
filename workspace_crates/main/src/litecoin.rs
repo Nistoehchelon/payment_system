@@ -166,9 +166,11 @@ pub async fn prepare_sweep_tx(
     let fee = fee_per_vbyte
         .checked_mul_result(LTCAtomicUnit::from_atomic(estimated_vsize))
         .or_else(|e| bail!("fee overflow"))?;
+    tracing::debug!("Fee: {}", fee.as_atomic());
     let output_value = total_in
         .checked_sub(fee.as_atomic())
         .ok_or_else(|| anyhow!("balance {} <  estimated fee {}", total_in, fee.as_atomic()))?;
+    tracing::debug!("Output value: {output_value}");
     let tx = Transaction {
         version: Version::TWO,
         lock_time: LockTime::ZERO,
