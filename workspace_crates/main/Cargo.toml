@@ -23,7 +23,8 @@ cryptocurrencies_stuff = { workspace = true }
 tokio-util = { workspace = true }
 bitcoin = { workspace = true }
 outscript = "0.2.7"
-litecoin = "0.32.8-rc.1"
+bip39 = "3.0.0"
+hex = "0.4.3"
 
 
 [dev-dependencies]

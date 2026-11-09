@@ -155,7 +155,7 @@ pub enum GeneratedAddress {
 }
 
 async fn dynamic_address_generation(
-    payment_id: String,
+    _payment_id: String,
     conn: &mut PgConnection,
     psc: &PaymentSystemConfig,
     m: &PaymentMethod,

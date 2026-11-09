@@ -1,7 +1,8 @@
+mod sign_and_send_transaction;
 use anyhow::{Context, anyhow, bail};
 use bitcoin::{
     Amount, OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Witness, absolute::LockTime,
-    p2p::Address, transaction::Version,
+    transaction::Version,
 };
 use cryptocurrencies_stuff::{currencies::LTCAtomicUnit, derive_ltc::derive_ltc_bip84_address};
 use outscript::parse_bitcoin_based_address;
@@ -24,6 +25,8 @@ pub async fn check_payment(
 }
 
 use serde::Deserialize;
+
+use crate::litecoin::sign_and_send_transaction::{broadcast_tx, sign_sweep_transaction};
 
 #[derive(Debug, Deserialize)]
 struct AddressStats {
@@ -57,40 +60,29 @@ pub async fn get_balance(address: &str) -> anyhow::Result<LTCAtomicUnit> {
 }
 
 pub async fn sweep_balance(
-    db_pool: sqlx::PgPool,
+    _db_pool: sqlx::PgPool,
     master_seed: String,
     from_index: u64,
     to_address: payment_system_structs::Address,
 ) -> anyhow::Result<String> {
-    let from_address =
-        derive_ltc_bip84_address(&master_seed, from_index).map_err(|e| anyhow!(e))?;
-    let from_balance = get_balance(&from_address).await?;
+    let from_address = payment_system_structs::Address(
+        derive_ltc_bip84_address(&master_seed, from_index).map_err(|e| anyhow!(e))?,
+    );
     let fee_estimation_per_virtual_byte =
         get_a_fee_estimate_per_virtual_byte(RecommendedFeeType::FastestFee).await?;
-    let utxos = get_utxos(&from_address).await?;
-    let prepared_transaction =
-        prepare_sweep_tx(utxos, to_address, fee_estimation_per_virtual_byte).await?;
+    let utxos = get_utxos(&from_address.0).await?;
+    let prepared_transaction = prepare_sweep_tx(
+        utxos,
+        from_address,
+        to_address,
+        fee_estimation_per_virtual_byte,
+    )
+    .await?;
 
-    // let _ = send_transaction(
-    //     master_seed,
-    //     from_index,
-    //     max_possible_sweep_amount,
-    //     estimated_fee,
-    //     to_address,
-    // )
-    // .await?;
-    // send and mark as complete in db
-
-    todo!()
-}
-pub async fn send_transaction(
-    master_seed: String,
-    index: u64,
-    amount: LTCAtomicUnit,
-    fee: LTCAtomicUnit,
-    destination: Address,
-) -> anyhow::Result<String> {
-    todo!()
+    let signed_tx = sign_sweep_transaction(&master_seed, from_index, prepared_transaction).await?;
+    let res = broadcast_tx(signed_tx).await;
+    tracing::debug!("Res: {res:?}");
+    Ok("TX Sent".to_string())
 }
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct Utxo {
@@ -120,11 +112,19 @@ pub async fn get_utxos(address: &str) -> anyhow::Result<Vec<Utxo>> {
     Ok(utxos.into_iter().filter(|u| u.status.confirmed).collect())
 }
 
+#[derive(Debug, Clone)]
+pub struct PreparedSweep {
+    pub tx: bitcoin::blockdata::transaction::Transaction,
+    pub input_values: Vec<bitcoin::Amount>,
+    pub from_script_pubkey: ScriptBuf,
+}
+
 pub async fn prepare_sweep_tx(
     utxos: Vec<Utxo>,
+    origin: payment_system_structs::Address,
     destination: payment_system_structs::Address,
     fee_per_vbyte: LTCAtomicUnit,
-) -> anyhow::Result<bitcoin::blockdata::transaction::Transaction> {
+) -> anyhow::Result<PreparedSweep> {
     if utxos.is_empty() {
         bail!("No UTXOs to sweep");
     }
@@ -171,7 +171,14 @@ pub async fn prepare_sweep_tx(
             script_pubkey: dest_script,
         }],
     };
-    Ok(tx)
+    let from_script_bytes = parse_bitcoin_based_address("litecoin", &origin.0)
+        .map_err(|e| anyhow!("invalid source Litecoin address: {e}"))?;
+    let from_script_pubkey = ScriptBuf::from_bytes(from_script_bytes.bytes().to_vec());
+    Ok(PreparedSweep {
+        tx,
+        input_values: utxos.iter().map(|u| Amount::from_sat(u.value)).collect(),
+        from_script_pubkey: from_script_pubkey,
+    })
 }
 
 pub fn calculate_fee(fee_per_vbyte: LTCAtomicUnit, vsize: u64) -> anyhow::Result<LTCAtomicUnit> {
