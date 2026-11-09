@@ -108,7 +108,7 @@ pub async fn send_transaction(
 ) -> anyhow::Result<String> {
     todo!()
 }
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize)]
 pub struct Utxo {
     pub txid: String,
     pub vout: u32,
@@ -116,7 +116,7 @@ pub struct Utxo {
     pub status: UtxoStatus,
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize)]
 pub struct UtxoStatus {
     pub confirmed: bool,
 }
