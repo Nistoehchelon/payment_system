@@ -1,4 +1,5 @@
-mod sign_and_send_transaction;
+pub mod reverse;
+pub mod sign_and_send_transaction;
 use anyhow::{Context, anyhow, bail};
 use bitcoin::{
     Amount, OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Witness, absolute::LockTime,

@@ -11,6 +11,7 @@ use std::str::FromStr;
 
 use crate::litecoin::PreparedSweep;
 
+#[derive(Debug, Clone)]
 pub struct SignedTransaction(pub bitcoin::Transaction);
 pub async fn sign_sweep_transaction(
     master_seed: &str,
