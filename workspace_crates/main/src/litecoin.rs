@@ -165,22 +165,18 @@ pub async fn prepare_sweep_tx(
             })
         })
         .collect::<anyhow::Result<Vec<_>>>()?;
-    let estimated_vsize = estimate_vsize(utxos.len(), dest_script.len());
-    let estimated_fee = calculate_fee(fee_per_vbyte.clone(), estimated_vsize)?;
-
-    let more_exactly_estimated_vsize = estimate_vsize_more_exactly(&inputs, &dest_script);
-    let more_exact_fee = calculate_fee(fee_per_vbyte, more_exactly_estimated_vsize)?;
+    let estimated_vsize = estimate_vsize(&inputs, &dest_script);
+    let estimated_fee = calculate_fee(fee_per_vbyte, estimated_vsize)?;
     tracing::debug!("Estimated fee: {}", estimated_fee.as_atomic());
-    tracing::debug!("More exact fee: {}", more_exact_fee.as_atomic());
 
     let total_in: u64 = utxos.iter().map(|u| u.value).sum();
     let output_value = total_in
-        .checked_sub(more_exact_fee.as_atomic())
+        .checked_sub(estimated_fee.as_atomic())
         .ok_or_else(|| {
             anyhow!(
                 "balance {} <  estimated fee {}",
                 total_in,
-                more_exact_fee.as_atomic()
+                estimated_fee.as_atomic()
             )
         })?;
     tracing::debug!("Output value: {output_value}");
@@ -202,13 +198,7 @@ pub fn calculate_fee(fee_per_vbyte: LTCAtomicUnit, vsize: u64) -> anyhow::Result
         .map_err(|e| anyhow!("fee overflow: {e:?}"))
 }
 
-fn estimate_vsize(num_inputs: usize, dest_script_len: usize) -> u64 {
-    const TX_OVERHEAD_VBYTES: u64 = 10;
-    const P2WPKH_INPUT_VBYTES: u64 = 68;
-    TX_OVERHEAD_VBYTES + (num_inputs as u64 * P2WPKH_INPUT_VBYTES) + dest_script_len as u64
-}
-
-pub fn estimate_vsize_more_exactly(real_inputs: &[TxIn], dest_script: &ScriptBuf) -> u64 {
+pub fn estimate_vsize(real_inputs: &[TxIn], dest_script: &ScriptBuf) -> u64 {
     let dummy_inputs: Vec<TxIn> = real_inputs
         .iter()
         .map(|txin| {
