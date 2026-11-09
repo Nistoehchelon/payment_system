@@ -1,10 +1,9 @@
 use anyhow::{Context, anyhow, bail};
 use bitcoin::{
-    OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Witness, absolute::LockTime,
-    address::Address as BitcoinAddress, consensus::encode::serialize_hex, transaction::Version,
+    OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Witness, absolute::LockTime, address::{Address as BitcoinAddress, NetworkChecked, NetworkUnchecked}, consensus::encode::serialize_hex, hex::HexToArrayError, p2p::Address, transaction::Version,
 };
 use cryptocurrencies_stuff::{currencies::LTCAtomicUnit, derive_ltc::derive_ltc_bip84_address};
-use payment_system_structs::{Address, PaymentSqlxShape, PaymentSystemConfig};
+use payment_system_structs::{PaymentSqlxShape, PaymentSystemConfig};
 
 pub async fn check_payment(
     _db_pool: sqlx::PgPool,
@@ -61,35 +60,36 @@ pub async fn sweep_balance(
     db_pool: sqlx::PgPool,
     master_seed: String,
     from_index: u64,
-    to_address: Address,
+    to_address: payment_system_structs::Address,
 ) -> anyhow::Result<String> {
     let from_address =
         derive_ltc_bip84_address(&master_seed, from_index).map_err(|e| anyhow!(e))?;
     let from_balance = get_balance(&from_address).await?;
     let fee_estimation_per_virtual_byte =
         get_a_fee_estimate_per_virtual_byte(RecommendedFeeType::FastestFee).await?;
-    let prepared_transaction = prepare_sweep_tx().await?;
-    let estimated_fee = estimate_transaction_fee_based_tx_bytes(
-        fee_estimation_per_virtual_byte,
-        prepared_transaction.clone(),
-    )
-    .await?;
-    let max_possible_sweep_amount = match from_balance.checked_sub_result(estimated_fee.clone()) {
-        Ok(amount) => amount,
-        Err(e) => {
-            bail!("{e:?}")
-        }
-    };
+    // todo!();
+    // let prepared_transaction = prepare_sweep_tx().await?;
+    // let estimated_fee = estimate_transaction_fee_based_tx_bytes(
+    //     fee_estimation_per_virtual_byte,
+    //     prepared_transaction.clone(),
+    // )
+    // .await?;
+    // let max_possible_sweep_amount = match from_balance.checked_sub_result(estimated_fee.clone()) {
+    //     Ok(amount) => amount,
+    //     Err(e) => {
+    //         bail!("{e:?}")
+    //     }
+    // };
 
-    let _ = send_transaction(
-        master_seed,
-        from_index,
-        max_possible_sweep_amount,
-        estimated_fee,
-        to_address,
-    )
-    .await?;
-    // send and mark as complete in db
+    // let _ = send_transaction(
+    //     master_seed,
+    //     from_index,
+    //     max_possible_sweep_amount,
+    //     estimated_fee,
+    //     to_address,
+    // )
+    // .await?;
+    // // send and mark as complete in db
 
     todo!()
 }
@@ -130,7 +130,34 @@ pub async fn get_utxos(address: &str) -> anyhow::Result<Vec<Utxo>> {
     Ok(utxos.into_iter().filter(|u| u.status.confirmed).collect())
 }
 
-pub async fn prepare_sweep_tx() -> anyhow::Result<String> {
+pub async fn prepare_sweep_tx(utxos: Vec<Utxo>, destination: Address, fee_per_vbyte: LTCAtomicUnit) -> anyhow::Result<String> {
+    if utxos.is_empty() {
+        bail!("No UTXOs to sweep");
+    }
+    let dest: BitcoinAddress<NetworkUnchecked> = "ltc1qp7cnlxmz8wgc93g0m020ckru2s55t25y3wunf6".parse()?;
+    let dest: BitcoinAddress<NetworkChecked> = dest.require_network(bitcoin::Network::Bitcoin)?;
+    let dest_script = dest.script_pubkey();
+
+    let inputs: Vec<TxIn> = utxos
+    .iter()
+    .map(|u| -> anyhow::Result<TxIn> {
+       let txid = u
+       .txid
+       .parse()
+       .with_context(|| format!("API returned invalid txid: {:?}", u.txid))?;
+    Ok(TxIn { previous_output: OutPoint { txid, vout: u.vout },
+            script_sig: ScriptBuf::new(),
+            sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+            witness: Witness::new(), })
+    })
+    .collect::<anyhow::Result<Vec<_>>>()?;
+let total_in: u64 = utxos.iter().map(|u| u.value).sum();
+let arbitrary_number_one = 10;
+let arbitrary_number_two = 68;
+let estimated_vsize = arbitrary_number_one + (utxos.len() as u64 * arbitrary_number_two) + dest_script.len() as u64;
+let fee = fee_per_vbyte
+.
+
     todo!()
 }
 pub async fn estimate_transaction_fee_based_tx_bytes(
