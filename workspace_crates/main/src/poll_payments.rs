@@ -102,8 +102,6 @@ pub async fn poll_payments(
                     let Ok(received) = litecoin::check_payment(
                         db_pool.clone(),
                         &payment,
-                        &rpc,
-                        &payment_system_config,
                     )
                     .await
                     else {
