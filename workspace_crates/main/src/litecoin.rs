@@ -1,4 +1,8 @@
 use anyhow::{Context, anyhow, bail};
+use bitcoin::{
+    OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Witness, absolute::LockTime,
+    address::Address as BitcoinAddress, consensus::encode::serialize_hex, transaction::Version,
+};
 use cryptocurrencies_stuff::{currencies::LTCAtomicUnit, derive_ltc::derive_ltc_bip84_address};
 use payment_system_structs::{Address, PaymentSqlxShape, PaymentSystemConfig};
 
@@ -62,7 +66,8 @@ pub async fn sweep_balance(
     let from_address =
         derive_ltc_bip84_address(&master_seed, from_index).map_err(|e| anyhow!(e))?;
     let from_balance = get_balance(&from_address).await?;
-    let fee_estimation_per_virtual_byte = get_a_fee_estimate_per_virtual_byte(RecommendedFeeType::FastestFee).await?;
+    let fee_estimation_per_virtual_byte =
+        get_a_fee_estimate_per_virtual_byte(RecommendedFeeType::FastestFee).await?;
     let prepared_transaction = prepare_sweep_tx().await?;
     let estimated_fee = estimate_transaction_fee_based_tx_bytes(
         fee_estimation_per_virtual_byte,
@@ -97,6 +102,34 @@ pub async fn send_transaction(
 ) -> anyhow::Result<String> {
     todo!()
 }
+#[derive(Debug, serde::Deserialize)]
+pub struct Utxo {
+    pub txid: String,
+    pub vout: u32,
+    pub value: u64,
+    pub status: UtxoStatus,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct UtxoStatus {
+    pub confirmed: bool,
+}
+
+pub async fn get_utxos(address: &str) -> anyhow::Result<Vec<Utxo>> {
+    let url = format!("https://litecoinspace.org/api/address/{address}/utxo");
+    let utxos: Vec<Utxo> = reqwest::get(&url)
+        .await
+        .context("failed to reach UTXO endpoint")?
+        .error_for_status()
+        .context("UTXO endpoint returned an error")?
+        .json()
+        .await
+        .context("failed to parse UTXOs")?;
+
+    // Only use confirmed UTXOs to avoid spending unconfirmed outputs
+    Ok(utxos.into_iter().filter(|u| u.status.confirmed).collect())
+}
+
 pub async fn prepare_sweep_tx() -> anyhow::Result<String> {
     todo!()
 }

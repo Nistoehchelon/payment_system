@@ -37,3 +37,4 @@ tracing = "0.1.44"
 cryptocurrencies_stuff = { git = "ssh://git@github.com/Nistoehchelonmneugaphy/cryptocurrencies_stuff.git" }
 tokio-util = { version = "0.7.20"}
 test-log = "0.2.21"
+bitcoin = "0.32.102"

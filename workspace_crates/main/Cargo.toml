@@ -21,6 +21,7 @@ chrono = { workspace = true }
 tracing = { workspace = true }
 cryptocurrencies_stuff = { workspace = true }
 tokio-util = { workspace = true }
+bitcoin = { workspace = true }
 
 
 [dev-dependencies]
