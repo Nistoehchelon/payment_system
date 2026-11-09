@@ -166,13 +166,23 @@ pub async fn prepare_sweep_tx(
         })
         .collect::<anyhow::Result<Vec<_>>>()?;
     let estimated_vsize = estimate_vsize(utxos.len(), dest_script.len());
-    let fee = calculate_fee(fee_per_vbyte, estimated_vsize)?;
-    tracing::debug!("Fee: {}", fee.as_atomic());
-    
+    let estimated_fee = calculate_fee(fee_per_vbyte.clone(), estimated_vsize)?;
+
+    let more_exactly_estimated_vsize = estimate_vsize_more_exactly(&inputs, &dest_script);
+    let more_exact_fee = calculate_fee(fee_per_vbyte, more_exactly_estimated_vsize)?;
+    tracing::debug!("Estimated fee: {}", estimated_fee.as_atomic());
+    tracing::debug!("More exact fee: {}", more_exact_fee.as_atomic());
+
     let total_in: u64 = utxos.iter().map(|u| u.value).sum();
     let output_value = total_in
-        .checked_sub(fee.as_atomic())
-        .ok_or_else(|| anyhow!("balance {} <  estimated fee {}", total_in, fee.as_atomic()))?;
+        .checked_sub(more_exact_fee.as_atomic())
+        .ok_or_else(|| {
+            anyhow!(
+                "balance {} <  estimated fee {}",
+                total_in,
+                more_exact_fee.as_atomic()
+            )
+        })?;
     tracing::debug!("Output value: {output_value}");
     let tx = Transaction {
         version: Version::TWO,
@@ -186,19 +196,46 @@ pub async fn prepare_sweep_tx(
     Ok(serialize_hex(&tx))
 }
 
+pub fn calculate_fee(fee_per_vbyte: LTCAtomicUnit, vsize: u64) -> anyhow::Result<LTCAtomicUnit> {
+    fee_per_vbyte
+        .checked_mul_result(LTCAtomicUnit::from_atomic(vsize))
+        .map_err(|e| anyhow!("fee overflow: {e:?}"))
+}
+
 fn estimate_vsize(num_inputs: usize, dest_script_len: usize) -> u64 {
     const TX_OVERHEAD_VBYTES: u64 = 10;
     const P2WPKH_INPUT_VBYTES: u64 = 68;
     TX_OVERHEAD_VBYTES + (num_inputs as u64 * P2WPKH_INPUT_VBYTES) + dest_script_len as u64
 }
-pub fn calculate_fee(
-    fee_per_vbyte: LTCAtomicUnit,
-    estimated_vsize: u64,
-) -> anyhow::Result<LTCAtomicUnit> {
-    fee_per_vbyte
-        .checked_mul_result(LTCAtomicUnit::from_atomic(estimated_vsize))
-        .map_err(|e| anyhow!("fee overflow: {e:?}"))
+
+pub fn estimate_vsize_more_exactly(real_inputs: &[TxIn], dest_script: &ScriptBuf) -> u64 {
+    let dummy_inputs: Vec<TxIn> = real_inputs
+        .iter()
+        .map(|txin| {
+            let mut dummy_txin = txin.clone();
+            let mut witness = Witness::new();
+
+            witness.push(vec![0u8; 72]);
+            witness.push(vec![0u8; 33]);
+
+            dummy_txin.witness = witness;
+            dummy_txin
+        })
+        .collect();
+    let dummy_output = TxOut {
+        value: bitcoin::Amount::from_sat(0),
+        script_pubkey: dest_script.clone(),
+    };
+
+    let dummy_tx = Transaction {
+        version: Version::TWO,
+        lock_time: LockTime::ZERO,
+        input: dummy_inputs,
+        output: vec![dummy_output],
+    };
+    dummy_tx.weight().to_vbytes_ceil() as u64
 }
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RecommendedFees {
