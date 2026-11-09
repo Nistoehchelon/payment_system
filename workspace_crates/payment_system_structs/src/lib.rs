@@ -19,6 +19,7 @@ pub struct PaymentSystemConfig {
     pub active_invoice_minutes_since_creation: u64,
     pub litecoin_master_seed: String,
     pub litecoin_rest_api_url: String,
+    pub litecoin_treasury_address: String,
     pub cf_bypass_token_header_name: String,
     pub cf_bypass_token_header_value: String,
     pub confirm_all_for_testing_purposes: bool,

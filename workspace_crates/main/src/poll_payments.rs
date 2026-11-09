@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use payment_system_structs::{PaymentId, PaymentSqlxShape, PaymentSystemConfig};
+use payment_system_structs::{Address, PaymentId, PaymentSqlxShape, PaymentSystemConfig};
 use sqlx::postgres::types::PgInterval;
 use tokio_util::sync::CancellationToken;
 
@@ -155,7 +155,20 @@ pub async fn poll_payments(
                                 resp
                             );
 
-                            litecoin::sweep_balance().await;
+                            let index = match sqlx::query!(
+                                "SELECT index FROM litecoin_address_indexes WHERE payment_id = $1",
+                                &payment.id
+                            )
+                            .fetch_one(&mut *tx)
+                            .await
+                            {
+                                Ok(i) => i.index,
+                                Err(e) => {
+                                    tracing::debug!("{e:?}");
+                                    continue;
+                                }
+                            };
+                             let _ = litecoin::sweep_balance(db_pool.clone(), payment_system_config.litecoin_master_seed.clone(), index as u64, Address(payment_system_config.litecoin_treasury_address.clone())).await;
                             let _ = tx.commit().await;
                             // That's it, right?
                         }

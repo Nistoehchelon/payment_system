@@ -16,8 +16,7 @@ async fn main() -> anyhow::Result<()> {
 
     if server::will_show_version_then_would_like_to_terminate_the_program(
         app_executable_version::VERSION,
-    )
-    {
+    ) {
         return Ok(());
     }
 
@@ -150,7 +149,7 @@ pub enum GeneratedAddress {
         address: Address,
     },
     Monero {
-        payment_id: PaymentId,
+        monero_payment_id: PaymentId,
         address: Address,
     },
 }
@@ -161,20 +160,20 @@ async fn dynamic_address_generation(
     psc: &PaymentSystemConfig,
     m: &PaymentMethod,
 ) -> Result<GeneratedAddress, String> {
-    let Ok(Some(index)) = sqlx::query_scalar!(
-        "SELECT COUNT(*) FROM payments WHERE method = $1",
-        m.to_string()
-    )
-    .fetch_one(&mut *conn)
-    .await
-    else {
-        println!("Could not get count {}", m);
-        return Err("...".to_string());
-    };
-
-    let index = index as u64;
     match m {
         PaymentMethod::Litecoin => {
+            let Ok(Some(index)) = sqlx::query_scalar!(
+                "SELECT COUNT(*) FROM payments WHERE method = $1",
+                m.to_string()
+            )
+            .fetch_one(&mut *conn)
+            .await
+            else {
+                println!("Could not get count {}", m);
+                return Err("...".to_string());
+            };
+
+            let index = index as u64;
             let Ok(address) = derive_ltc_bip84_address(&psc.litecoin_master_seed, index) else {
                 println!("Litecoin addr error");
                 return Err("Couldn't derive litecoin".to_string());
@@ -192,9 +191,8 @@ async fn dynamic_address_generation(
                         return Err(format!("Err '{e}' from monero subaddr gen"));
                     }
                 };
-            sqlx::query!("INSERT INTO monero_integrated_payment_ids (payment_id, monero_payment_id) VALUES ($1, $2)", payment_id, monero_payment_id.to_string()).execute(conn).await.map_err(|e| e.to_string())?;
             Ok(GeneratedAddress::Monero {
-                payment_id: monero_payment_id,
+                monero_payment_id,
                 address,
             })
         }
@@ -295,13 +293,13 @@ impl Router {
 
                 println!("Invoice: {invoice_req:#?}");
                 let i64_amount: i64 = ok_or_400!(invoice_req.amount_atomic.try_into());
-                let id = ok_or_400!(sqlx::query!("INSERT INTO payments (status_update_callback, success_callback, method, address, amount) VALUES($1, $2, $3, $4, $5::bigint) RETURNING id", invoice_req.status_update_callback,  invoice_req.success_callback,  invoice_req.method.to_string(), "to_do", i64_amount).fetch_one(&mut *tx).await, "sqlx error").id;
+                let payment_id = ok_or_400!(sqlx::query!("INSERT INTO payments (status_update_callback, success_callback, method, address, amount) VALUES($1, $2, $3, $4, $5::bigint) RETURNING id", invoice_req.status_update_callback,  invoice_req.success_callback,  invoice_req.method.to_string(), "to_do", i64_amount).fetch_one(&mut *tx).await, "sqlx error").id;
                 for (k, v) in invoice_req.callback_headers.0.iter() {
-                    ok_or_400!(sqlx::query!("INSERT INTO callback_headers (payment_id, key, value) VALUES ($1, $2, $3)", id.clone(), k, v, ).execute(&mut *tx).await);
+                    ok_or_400!(sqlx::query!("INSERT INTO callback_headers (payment_id, key, value) VALUES ($1, $2, $3)", payment_id.clone(), k, v, ).execute(&mut *tx).await);
                 }
                 let gened_address = ok_or_400!(
                     dynamic_address_generation(
-                        id.clone(),
+                        payment_id.clone(),
                         &mut tx,
                         &payment_system_config.clone(),
                         &invoice_req.method.clone()
@@ -310,17 +308,23 @@ impl Router {
                     format!("Could not generate address for {}", invoice_req.method)
                 );
                 let address = match gened_address {
-                    GeneratedAddress::Litecoin { index: _, address } => address,
+                    GeneratedAddress::Litecoin { index, address } => {
+                        ok_or_400!(sqlx::query!("INSERT INTO litecoin_address_indexes (payment_id, index) VALUES ($1, $2)", payment_id, index.0 as i64).execute(&mut *tx).await.map_err(|e| e.to_string()));
+                        address
+                    }
                     GeneratedAddress::Monero {
-                        payment_id: _,
+                        monero_payment_id,
                         address,
-                    } => address,
+                    } => {
+                        ok_or_400!(sqlx::query!("INSERT INTO monero_integrated_payment_ids (payment_id, monero_payment_id) VALUES ($1, $2)", payment_id, monero_payment_id.to_string()).execute(&mut *tx).await.map_err(|e| e.to_string()));
+                        address
+                    }
                 };
                 ok_or_400!(
                     sqlx::query!(
                         "UPDATE payments SET address = $1 WHERE id = $2",
                         address.0,
-                        id
+                        payment_id
                     )
                     .execute(&mut *tx)
                     .await
@@ -328,7 +332,7 @@ impl Router {
 
                 ok_or_400!(tx.commit().await);
                 let payment_info = PaymentInfo {
-                    payment_id: PaymentId(id),
+                    payment_id: PaymentId(payment_id),
                     amount: Amount(invoice_req.amount_atomic),
                     address,
                     method: invoice_req.method,
