@@ -1,11 +1,10 @@
 pub mod transfer_to_treasury_wallet_after_receiving_payment;
-use anyhow::{Context, anyhow, bail};
+use anyhow::{Context, anyhow};
 use bitcoin::{
-    Amount, OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Witness, absolute::LockTime,
+    ScriptBuf, Transaction, TxIn, TxOut, Witness, absolute::LockTime,
     transaction::Version,
 };
-use cryptocurrencies_stuff::{currencies::LTCAtomicUnit, derive_ltc::derive_ltc_bip84_address};
-use outscript::parse_bitcoin_based_address;
+use cryptocurrencies_stuff::currencies::LTCAtomicUnit;
 
 pub mod check_payment;
 pub use check_payment::check_payment;
@@ -15,10 +14,6 @@ pub mod get_utxos;
 
 use serde::Deserialize;
 
-use crate::litecoin::{
-    get_utxos::{Utxo, get_utxos},
-    transfer_to_treasury_wallet_after_receiving_payment::{broadcast_tx, sign_sweep_transaction},
-};
 
 pub fn calculate_fee(fee_per_vbyte: LTCAtomicUnit, vsize: u64) -> anyhow::Result<LTCAtomicUnit> {
     fee_per_vbyte

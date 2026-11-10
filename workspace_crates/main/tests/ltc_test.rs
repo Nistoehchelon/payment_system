@@ -1,4 +1,4 @@
-use main::litecoin::{self};
+use main::litecoin::{self, transfer_to_treasury_wallet_after_receiving_payment::prepare_sweep_tx};
 use payment_system_structs::ReceivingPaymentAddress;
 
 // Apparently tracing initialization is needed in tests
@@ -45,7 +45,7 @@ pub async fn test_litecoin_get_utxos() {
             .await
             .unwrap();
     let utxos = main::litecoin::get_utxos::get_utxos(&addr_1).await.unwrap();
-    let tx = litecoin::prepare_sweep_tx(
+    let tx = prepare_sweep_tx(
         utxos.clone(),
         payment_system_structs::ReceivingPaymentAddress(addr_2.to_string()),
         payment_system_structs::ReceivingPaymentAddress(addr_3.to_string()),
