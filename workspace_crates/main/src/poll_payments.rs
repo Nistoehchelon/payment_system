@@ -2,7 +2,9 @@ use std::{ops::ControlFlow, time::Duration};
 
 use cryptocurrencies_stuff::currencies::LTCAtomicUnit;
 use payment_system_structs::{
-    CryptoAddress, PaymentId, PaymentMethod::{self, Litecoin, Monero}, PaymentSqlxShape, PaymentSystemConfig, ReceivingPaymentAddress,
+    CryptoAddress, PaymentId,
+    PaymentMethod::{self, Litecoin, Monero},
+    PaymentSqlxShape, PaymentSystemConfig, ReceivingPaymentAddress,
 };
 use sqlx::postgres::types::PgInterval;
 use tokio_util::sync::CancellationToken;
@@ -64,25 +66,8 @@ pub async fn poll_payments(
                 }
             };
             if paid {
-                let Ok(mut tx) = db_pool.begin().await else {
-                    continue;
-                };
-                if let ControlFlow::Break(_) = successful_payment(&mut tx, invoice.clone()).await {
-                    continue;
-                }
-                if let ControlFlow::Break(_) =
-                    send_success_webhook(&rpc, invoice.clone(), &mut tx).await
-                {
-                    continue;
-                }
-
-                let _ = tx.commit().await;
-                let Ok(mut sweep_tx) = db_pool.begin().await else {
-                    continue;
-                };
-                // Now maybe sweep, but I do not need to do it in the same transaction...
-                let _ = sweep(invoice, &mut sweep_tx, payment_system_config.clone()).await;
-                let _ = sweep_tx.commit().await;
+                process_invoice_that_was_just_paid(&payment_system_config, &rpc, &db_pool, invoice)
+                    .await;
             }
             if cancellable_sleep(
                 Duration::from_secs(sleep_between_each_payment_check),
@@ -106,6 +91,32 @@ pub async fn poll_payments(
             return;
         }
     }
+}
+
+async fn process_invoice_that_was_just_paid(
+    payment_system_config: &PaymentSystemConfig,
+    rpc: &reqwest::Client,
+    db_pool: &sqlx::Pool<sqlx::Postgres>,
+    invoice: Invoice,
+) -> anyhow::Result<(), ()> {
+    let Ok(mut tx) = db_pool.begin().await else {
+        return Err(());
+    };
+    if let ControlFlow::Break(_) = successful_payment(&mut tx, invoice.clone()).await {
+        return Err(());
+    }
+    if let ControlFlow::Break(_) = send_success_webhook(rpc, invoice.clone(), &mut tx).await {
+        return Err(());
+    }
+    let _ = tx.commit().await;
+    let Ok(mut sweep_tx) = db_pool.begin().await else {
+        return Err(());
+    };
+    let _ = sweep(invoice, &mut sweep_tx, payment_system_config.clone()).await;
+    let _ = sweep_tx.commit().await;
+
+    // Now maybe sweep, but I do not need to do it in the same transaction...
+    Ok(())
 }
 
 async fn successful_payment(tx: &mut sqlx::PgConnection, invoice: Invoice) -> ControlFlow<()> {
