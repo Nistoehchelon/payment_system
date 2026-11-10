@@ -8,11 +8,12 @@ use payment_system_structs::ReceivingPaymentAddress;
 #[test_log::test]
 pub async fn test_litecoin_get_address_balance() {
     let addr_1 = std::env::var("ADDR_1").unwrap();
+    let confs = 1;
     let b =
-        litecoin::get_address_balance::get_address_balance(ReceivingPaymentAddress(addr_1.clone()))
+        litecoin::get_address_balance::get_address_balance(ReceivingPaymentAddress(addr_1.clone()), confs)
             .await
             .unwrap();
-    let b_utxos = litecoin::get_address_balance::utxos_get_address_balance(
+    let b_utxos = litecoin::get_address_balance::get_address_balance(
         ReceivingPaymentAddress(addr_1.clone()),
         1,
     )
