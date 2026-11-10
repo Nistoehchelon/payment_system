@@ -1966,9 +1966,9 @@ dependencies = [
 
 [[package]]
 name = "purecrypto"
-version = "0.10.4"
+version = "0.10.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3195d112344906f1ef5f634a7e1840d864044f9674ed62fdfd720ff2bbfc8bcb"
+checksum = "b945ccb022e3f9ad7a56ed7083f50ac15b892795fbc1b204cf0008bd560d9ed9"
 dependencies = [
  "compcol",
 ]
