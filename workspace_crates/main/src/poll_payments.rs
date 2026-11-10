@@ -10,7 +10,7 @@ use sqlx::postgres::types::PgInterval;
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    fetch_callback_headers, litecoin,
+    fetch_zero_or_more_callback_headers, litecoin,
     monero::{self},
 };
 
@@ -64,8 +64,9 @@ pub async fn poll_payments(
                             continue;
                         }
                         let Ok(headers) =
-                            fetch_callback_headers(&mut tx, PaymentId(invoice.id.0.clone())).await
+                            fetch_zero_or_more_callback_headers(&mut tx, PaymentId(invoice.id.0.clone())).await
                         else {
+                            tracing::debug!("Error fetching callback headers");
                             continue;
                         };
 
@@ -120,7 +121,7 @@ pub async fn poll_payments(
                             .execute(&mut *tx)
                             .await;
                             let Ok(headers) =
-                                fetch_callback_headers(&mut tx, PaymentId(invoice.id.0.clone()))
+                                fetch_zero_or_more_callback_headers(&mut tx, PaymentId(invoice.id.0.clone()))
                                     .await
                             else {
                                 continue;

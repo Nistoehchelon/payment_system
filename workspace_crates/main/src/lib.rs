@@ -5,7 +5,7 @@ pub mod macros_400;
 pub mod monero;
 pub mod poll_payments;
 
-async fn fetch_callback_headers(
+async fn fetch_zero_or_more_callback_headers(
     conn: &mut PgConnection,
     payment_id: PaymentId,
 ) -> Result<CallbackHeaders, String> {
