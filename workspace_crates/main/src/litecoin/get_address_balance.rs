@@ -14,16 +14,23 @@ pub struct ChainStats {
 
 
 
+#[tracing::instrument]
 pub async fn get_address_balance(address: &str) -> anyhow::Result<LTCAtomicUnit> {
     let url = format!("https://litecoinspace.org/api/address/{address}");
-    let stats: AddressStats = reqwest::get(&url)
+    let stats: AddressStats =match reqwest::get(&url)
         .await
         .context("failed to reach Litecoin Space")?
         .error_for_status()
         .context("address not found or API error")?
         .json()
         .await
-        .context("failed to parse address stats")?;
+        .context("failed to parse address stats") {
+            Ok(s)=>s,
+            Err(e) =>{
+                tracing::error!("{e}");
+                return Err(e);
+            }
+        };
 
     let confirmed = stats
         .chain_stats
@@ -31,5 +38,6 @@ pub async fn get_address_balance(address: &str) -> anyhow::Result<LTCAtomicUnit>
         .checked_sub(stats.chain_stats.spent_txo_sum)
         .ok_or_else(|| anyhow::anyhow!("address stats are inconsistent (spent > funded)"))?;
 
+    tracing::debug!("Balance: {confirmed}");
     Ok(LTCAtomicUnit::from_atomic(confirmed))
 }

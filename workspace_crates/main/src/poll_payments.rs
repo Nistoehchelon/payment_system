@@ -96,13 +96,16 @@ pub async fn poll_payments(
                     }
                 }
                 Litecoin => {
-                    let Ok(received) = litecoin::check_payment(
+                    let received= match litecoin::check_payment(
                         &invoice.receiving_payment_address.clone(),
                         LTCAtomicUnit::from_atomic(invoice.amount.0),
                     )
-                    .await
-                    else {
-                        continue;
+                    .await {
+                        Ok(b) => b,
+                        Err(e) => {
+                            tracing::error!("{e}");
+                            continue
+                        }
                     };
                     match received {
                         false => continue,
