@@ -25,7 +25,6 @@ pub struct PaymentSystemConfig {
     pub confirm_all_for_testing_purposes: bool,
 }
 
-
 pub struct PaymentSqlxShape {
     pub primary_key: i64,
     pub id: String,
@@ -42,7 +41,7 @@ pub struct PaymentSqlxShape {
 #[derive(Clone, serde::Serialize, serde::Deserialize, EnumString, strum::Display, Debug)]
 #[strum(ascii_case_insensitive)]
 #[derive(sqlx::Type)]
-#[sqlx(type_name="text")]
+#[sqlx(type_name = "text")]
 pub enum PaymentMethod {
     #[strum(serialize = "litecoin", serialize = "ltc")]
     Litecoin,
@@ -82,6 +81,16 @@ pub struct PaymentInfo {
 )]
 pub struct PaymentId(pub String);
 
+#[derive(
+    Debug,
+    Clone,
+    serde::Serialize,
+    serde::Deserialize,
+    derive_more::Display,
+    derive_more::From,
+    derive_more::Into,
+)]
+pub struct CryptoAddress(pub String);
 #[derive(
     Debug,
     Clone,

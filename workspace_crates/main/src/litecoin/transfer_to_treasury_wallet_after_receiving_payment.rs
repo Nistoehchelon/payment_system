@@ -88,12 +88,11 @@ pub async fn broadcast_tx(tx: SignedTransaction) -> anyhow::Result<String> {
 }
 
 pub async fn sweep_balance(
-    _db_pool: sqlx::PgPool,
     master_seed: String,
     from_index: u64,
-    to_address: payment_system_structs::ReceivingPaymentAddress,
-) -> anyhow::Result<String> {
-    let from_address = payment_system_structs::ReceivingPaymentAddress(
+    to_address: payment_system_structs::CryptoAddress,
+) -> anyhow::Result<()> {
+    let from_address = payment_system_structs::CryptoAddress(
         cryptocurrencies_stuff::derive_ltc::derive_ltc_bip84_address(&master_seed, from_index)
             .map_err(|e| anyhow!(e))?,
     );
@@ -117,7 +116,7 @@ pub async fn sweep_balance(
     let signed_tx = sign_sweep_transaction(&master_seed, from_index, prepared_transaction).await?;
     let res = broadcast_tx(signed_tx).await;
     tracing::debug!("Res: {res:?}");
-    Ok("TX Sent".to_string())
+    Ok(())
 }
 
 #[derive(Debug, Clone)]
@@ -129,8 +128,8 @@ pub struct PreparedSweep {
 
 pub async fn prepare_sweep_tx(
     utxos: Vec<super::get_utxos::Utxo>,
-    origin: payment_system_structs::ReceivingPaymentAddress,
-    destination: payment_system_structs::ReceivingPaymentAddress,
+    origin: payment_system_structs::CryptoAddress,
+    destination: payment_system_structs::CryptoAddress,
     fee_per_vbyte: cryptocurrencies_stuff::currencies::LTCAtomicUnit,
 ) -> anyhow::Result<PreparedSweep> {
     if utxos.is_empty() {

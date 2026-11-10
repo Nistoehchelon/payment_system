@@ -20,7 +20,6 @@ members = ["workspace_crates/*"]
 [workspace.dependencies]
 payment_system_structs = { path =  "workspace_crates/payment_system_structs" }
 app_executable_version = { path =  "workspace_crates/app_executable_version" }
-main = { path =  "workspace_crates/main" }
 tokio = { version = "1.54.1", features = ["full", "macros", "net", "rt-multi-thread", "time", "tokio-macros", "tracing"] }
 server = { git = "https://github.com/Nistoehchelonmneugaphy/server_2_only.git"}
 dotenvy = "0.15.7"

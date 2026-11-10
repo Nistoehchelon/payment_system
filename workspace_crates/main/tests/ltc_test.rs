@@ -47,8 +47,8 @@ pub async fn test_litecoin_get_utxos() {
     let utxos = main::litecoin::get_utxos::get_utxos(&addr_1).await.unwrap();
     let tx = prepare_sweep_tx(
         utxos.clone(),
-        payment_system_structs::ReceivingPaymentAddress(addr_2.to_string()),
-        payment_system_structs::ReceivingPaymentAddress(addr_3.to_string()),
+        payment_system_structs::CryptoAddress(addr_2.to_string()),
+        payment_system_structs::CryptoAddress(addr_3.to_string()),
         fee_per_vbyte.clone(),
     )
     .await

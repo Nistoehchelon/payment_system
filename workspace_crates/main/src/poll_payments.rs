@@ -2,9 +2,7 @@ use std::{ops::ControlFlow, time::Duration};
 
 use cryptocurrencies_stuff::currencies::LTCAtomicUnit;
 use payment_system_structs::{
-    PaymentId,
-    PaymentMethod::{self, Litecoin, Monero},
-    PaymentSqlxShape, PaymentSystemConfig, ReceivingPaymentAddress,
+    CryptoAddress, PaymentId, PaymentMethod::{self, Litecoin, Monero}, PaymentSqlxShape, PaymentSystemConfig, ReceivingPaymentAddress,
 };
 use sqlx::postgres::types::PgInterval;
 use tokio_util::sync::CancellationToken;
@@ -65,9 +63,26 @@ pub async fn poll_payments(
                     }
                 }
             };
-            if paid && let ControlFlow::Break(_) = successful_payment(&rpc, &db_pool, invoice).await
-            {
-                continue;
+            if paid {
+                let Ok(mut tx) = db_pool.begin().await else {
+                    continue;
+                };
+                if let ControlFlow::Break(_) = successful_payment(&mut tx, invoice.clone()).await {
+                    continue;
+                }
+                if let ControlFlow::Break(_) =
+                    send_success_webhook(&rpc, invoice.clone(), &mut tx).await
+                {
+                    continue;
+                }
+
+                let _ = tx.commit().await;
+                let Ok(mut sweep_tx) = db_pool.begin().await else {
+                    continue;
+                };
+                // Now maybe sweep, but I do not need to do it in the same transaction...
+                let _ = sweep(invoice, &mut sweep_tx, payment_system_config.clone()).await;
+                let _ = sweep_tx.commit().await;
             }
             if cancellable_sleep(
                 Duration::from_secs(sleep_between_each_payment_check),
@@ -93,15 +108,8 @@ pub async fn poll_payments(
     }
 }
 
-async fn successful_payment(
-    rpc: &reqwest::Client,
-    db_pool: &sqlx::Pool<sqlx::Postgres>,
-    invoice: Invoice,
-) -> ControlFlow<()> {
-    let Ok(mut tx) = db_pool.begin().await else {
-        return ControlFlow::Break(());
-    };
-    let _result = sqlx::query!(
+async fn successful_payment(tx: &mut sqlx::PgConnection, invoice: Invoice) -> ControlFlow<()> {
+    let Ok(_update_result) = sqlx::query!(
         "UPDATE invoices 
                              SET completed_at = NOW() 
                              WHERE id = $1 
@@ -109,9 +117,21 @@ async fn successful_payment(
         &invoice.id.0
     )
     .execute(&mut *tx)
-    .await;
+    .await
+    else {
+        return ControlFlow::Break(());
+    };
+
+    ControlFlow::Continue(())
+}
+
+async fn send_success_webhook(
+    rpc: &reqwest::Client,
+    invoice: Invoice,
+    tx: &mut sqlx::PgConnection,
+) -> ControlFlow<()> {
     let Ok(headers) =
-        fetch_zero_or_more_callback_headers(&mut tx, PaymentId(invoice.id.0.clone())).await
+        fetch_zero_or_more_callback_headers(&mut *tx, PaymentId(invoice.id.0.clone())).await
     else {
         return ControlFlow::Break(());
     };
@@ -136,48 +156,45 @@ async fn successful_payment(
         "Received resp after successful payment request: {:#?}",
         resp
     );
-    if let Some(value) = litecoin_sweep(invoice, &mut tx).await {
-        return value;
-    }
-    let _ = tx.commit().await;
-    // mark as complete
-    // let _ = litecoin::sweep_balance(
-    //     db_pool.clone(),
-    //     payment_system_config.litecoin_master_seed.clone(),
-    //     index as u64,
-    //     ReceivingPaymentAddress(
-    //         payment_system_config.litecoin_treasury_address.clone(),
-    //     ),
-    // )
-    // .await;
-    // That's it, right?
     ControlFlow::Continue(())
 }
 
-async fn litecoin_sweep(
+async fn sweep(
     invoice: Invoice,
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-) -> Option<ControlFlow<()>> {
-    let _index: u64 = match sqlx::query!(
-        "SELECT index FROM litecoin_address_indexes WHERE payment_id = $1",
+    payment_system_config: PaymentSystemConfig,
+) -> ControlFlow<()> {
+    let rpc_client = reqwest::Client::new();
+    match invoice.method {
+        Litecoin => {
+            litecoin::transfer_to_treasury_wallet_after_receiving_payment::sweep_balance(
+                payment_system_config.litecoin_master_seed.clone(),
+                0,
+                CryptoAddress(payment_system_config.litecoin_treasury_address.clone()),
+            )
+            .await
+            .unwrap_or_else(|e| {
+                tracing::error!("Error sweeping Litecoin: {e}");
+            });
+        }
+        Monero => {
+            monero::sweep_all(&rpc_client, &payment_system_config)
+                .await
+                .unwrap_or_else(|e| {
+                    tracing::error!("Error sweeping Monero: {e}");
+                });
+        }
+    }
+    let _ = sqlx::query!(
+        "UPDATE invoices 
+                             SET sweeped_at = NOW() 
+                             WHERE id = $1 
+                             AND sweeped_at IS NULL",
         &invoice.id.0
     )
-    .fetch_one(&mut **tx)
-    .await
-    {
-        Ok(i) => match i.index.try_into() {
-            Ok(i) => i,
-            Err(e) => {
-                tracing::debug!("Err {e}");
-                return Some(ControlFlow::Break(()));
-            }
-        },
-        Err(e) => {
-            tracing::debug!("{e:?}");
-            return Some(ControlFlow::Break(()));
-        }
-    };
-    None
+    .execute(&mut **tx)
+    .await;
+    ControlFlow::Continue(())
 }
 
 #[tracing::instrument]
@@ -191,11 +208,16 @@ async fn cancellable_sleep(
         _ = cancellation_token.cancelled() => Err(()),
     }
 }
-
+#[derive(Debug, Clone)]
 pub struct InvoiceId(pub String);
+#[derive(Debug, Clone)]
 pub struct StatusUpdateCallbackUrl(pub String);
+#[derive(Debug, Clone)]
 pub struct SuccessCallbackUrl(pub String);
+#[derive(Debug, Clone)]
 pub struct PaymentAmount(pub u64);
+
+#[derive(Debug, Clone)]
 pub struct Invoice {
     pub id: InvoiceId,
     pub status_update_callback_url: StatusUpdateCallbackUrl,
