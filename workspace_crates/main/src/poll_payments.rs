@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{ops::ControlFlow, time::Duration};
 
 use cryptocurrencies_stuff::currencies::LTCAtomicUnit;
 use payment_system_structs::{
@@ -33,159 +33,41 @@ pub async fn poll_payments(
         .unwrap_or_default();
         println!("Polling for {} payments", invoices.len());
         for invoice in invoices {
-            match invoice.method {
+            let paid = match invoice.method {
                 Monero => {
-                    let Ok(paid) = monero::check_payment(
+                    match monero::check_payment(
                         db_pool.clone(),
                         &invoice,
                         &rpc,
                         &payment_system_config,
                     )
                     .await
-                    else {
-                        continue;
-                    };
-                    let Ok(mut tx) = db_pool.begin().await else {
-                        continue;
-                    };
-                    if paid || payment_system_config.confirm_all_for_testing_purposes {
-                        let _ = monero::sweep_all(&rpc, &payment_system_config).await;
-                        let result = sqlx::query!(
-                            "UPDATE invoices 
-                             SET completed_at = NOW() 
-                             WHERE id = $1 
-                             AND completed_at IS NULL",
-                            &invoice.id.0
-                        )
-                        .execute(&mut *tx)
-                        .await;
-                        if result.is_err() {
-                            println!("Failed to mark invoice {} as complete", invoice.id.0);
-                            continue;
-                        }
-                        let Ok(headers) =
-                            fetch_zero_or_more_callback_headers(&mut tx, PaymentId(invoice.id.0.clone())).await
-                        else {
-                            tracing::debug!("Error fetching callback headers");
-                            continue;
-                        };
-
-                        let mut request = rpc.post(invoice.success_callback_url.0.clone());
-                        println!(
-                            "Sending success_callback {}, payment_id: {}",
-                            invoice.success_callback_url.0.clone(),
-                            invoice.id.0.clone()
-                        );
-                        request = request.body(format!("payment_id={}", invoice.id.0.clone()));
-                        for (key, value) in &headers.0 {
-                            request = request.header(key, value);
-                        }
-
-                        let resp = match request.send().await {
-                            Ok(resp) => resp,
-                            Err(e) => {
-                                println!("Callback returned error: {e:#?}");
-                                continue;
-                            }
-                        };
-                        println!(
-                            "Received resp after successful payment request: {:#?}",
-                            resp
-                        );
-                        let _ = tx.commit().await;
-                    }
-                }
-                Litecoin => {
-                    let received= match litecoin::check_payment(
-                        &invoice.receiving_payment_address.clone(),
-                        LTCAtomicUnit::from_atomic(invoice.amount.0),
-                    )
-                    .await {
+                    {
                         Ok(b) => b,
                         Err(e) => {
                             tracing::error!("{e}");
-                            continue
-                        }
-                    };
-                    match received {
-                        false => continue,
-                        true => {
-                            let Ok(mut tx) = db_pool.begin().await else {
-                                continue;
-                            };
-                            // mark as complete
-                            let _result = sqlx::query!(
-                                "UPDATE invoices 
-                             SET completed_at = NOW() 
-                             WHERE id = $1 
-                             AND completed_at IS NULL",
-                                &invoice.id.0
-                            )
-                            .execute(&mut *tx)
-                            .await;
-                            let Ok(headers) =
-                                fetch_zero_or_more_callback_headers(&mut tx, PaymentId(invoice.id.0.clone()))
-                                    .await
-                            else {
-                                continue;
-                            };
-
-                            let mut request = rpc.post(&invoice.success_callback_url.0);
-                            tracing::debug!(
-                                "Sending success_callback {}, payment_id: {}",
-                                invoice.success_callback_url.0,
-                                invoice.id.0
-                            );
-                            request = request.body(format!("payment_id={}", invoice.id.0));
-                            for (key, value) in &headers.0 {
-                                request = request.header(key, value);
-                            }
-
-                            let resp = match request.send().await {
-                                Ok(resp) => resp,
-                                Err(e) => {
-                                    println!("Callback returned error: {e:#?}");
-                                    continue;
-                                }
-                            };
-                            tracing::debug!(
-                                "Received resp after successful payment request: {:#?}",
-                                resp
-                            );
-
-                            let _index: u64 = match sqlx::query!(
-                                "SELECT index FROM litecoin_address_indexes WHERE payment_id = $1",
-                                &invoice.id.0
-                            )
-                            .fetch_one(&mut *tx)
-                            .await
-                            {
-                                Ok(i) => match i.index.try_into() {
-                                    Ok(i) => i,
-                                    Err(e) => {
-                                        tracing::debug!("Err {e}");
-                                        continue;
-                                    }
-                                },
-                                Err(e) => {
-                                    tracing::debug!("{e:?}");
-                                    continue;
-                                }
-                            };
-                            // let _ = litecoin::sweep_balance(
-                            //     db_pool.clone(),
-                            //     payment_system_config.litecoin_master_seed.clone(),
-                            //     index as u64,
-                            //     ReceivingPaymentAddress(
-                            //         payment_system_config.litecoin_treasury_address.clone(),
-                            //     ),
-                            // )
-                            // .await;
-                            let _ = tx.commit().await;
-                            // That's it, right?
+                            continue;
                         }
                     }
                 }
+                Litecoin => {
+                    match litecoin::check_payment(
+                        &invoice.receiving_payment_address.clone(),
+                        LTCAtomicUnit::from_atomic(invoice.amount.0),
+                    )
+                    .await
+                    {
+                        Ok(b) => b,
+                        Err(e) => {
+                            tracing::error!("{e}");
+                            continue;
+                        }
+                    }
+                }
+            };
+            if paid && let ControlFlow::Break(_) = successful_payment(&rpc, &db_pool, invoice).await
+            {
+                continue;
             }
             if cancellable_sleep(
                 Duration::from_secs(sleep_between_each_payment_check),
@@ -209,6 +91,93 @@ pub async fn poll_payments(
             return;
         }
     }
+}
+
+async fn successful_payment(
+    rpc: &reqwest::Client,
+    db_pool: &sqlx::Pool<sqlx::Postgres>,
+    invoice: Invoice,
+) -> ControlFlow<()> {
+    let Ok(mut tx) = db_pool.begin().await else {
+        return ControlFlow::Break(());
+    };
+    let _result = sqlx::query!(
+        "UPDATE invoices 
+                             SET completed_at = NOW() 
+                             WHERE id = $1 
+                             AND completed_at IS NULL",
+        &invoice.id.0
+    )
+    .execute(&mut *tx)
+    .await;
+    let Ok(headers) =
+        fetch_zero_or_more_callback_headers(&mut tx, PaymentId(invoice.id.0.clone())).await
+    else {
+        return ControlFlow::Break(());
+    };
+    let mut request = rpc.post(&invoice.success_callback_url.0);
+    tracing::debug!(
+        "Sending success_callback {}, payment_id: {}",
+        invoice.success_callback_url.0,
+        invoice.id.0
+    );
+    request = request.body(format!("payment_id={}", invoice.id.0));
+    for (key, value) in &headers.0 {
+        request = request.header(key, value);
+    }
+    let resp = match request.send().await {
+        Ok(resp) => resp,
+        Err(e) => {
+            println!("Callback returned error: {e:#?}");
+            return ControlFlow::Break(());
+        }
+    };
+    tracing::debug!(
+        "Received resp after successful payment request: {:#?}",
+        resp
+    );
+    if let Some(value) = litecoin_sweep(invoice, &mut tx).await {
+        return value;
+    }
+    let _ = tx.commit().await;
+    // mark as complete
+    // let _ = litecoin::sweep_balance(
+    //     db_pool.clone(),
+    //     payment_system_config.litecoin_master_seed.clone(),
+    //     index as u64,
+    //     ReceivingPaymentAddress(
+    //         payment_system_config.litecoin_treasury_address.clone(),
+    //     ),
+    // )
+    // .await;
+    // That's it, right?
+    ControlFlow::Continue(())
+}
+
+async fn litecoin_sweep(
+    invoice: Invoice,
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+) -> Option<ControlFlow<()>> {
+    let _index: u64 = match sqlx::query!(
+        "SELECT index FROM litecoin_address_indexes WHERE payment_id = $1",
+        &invoice.id.0
+    )
+    .fetch_one(&mut **tx)
+    .await
+    {
+        Ok(i) => match i.index.try_into() {
+            Ok(i) => i,
+            Err(e) => {
+                tracing::debug!("Err {e}");
+                return Some(ControlFlow::Break(()));
+            }
+        },
+        Err(e) => {
+            tracing::debug!("{e:?}");
+            return Some(ControlFlow::Break(()));
+        }
+    };
+    None
 }
 
 #[tracing::instrument]
