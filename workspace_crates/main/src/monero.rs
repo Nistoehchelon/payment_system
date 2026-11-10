@@ -1,5 +1,7 @@
-use payment_system_structs::{PaymentSqlxShape, PaymentSystemConfig};
+use payment_system_structs::PaymentSystemConfig;
 use reqwest::Client;
+
+use crate::poll_payments::Invoice;
 
 pub async fn sweep_all(
     rpc_client: &Client,
@@ -33,21 +35,21 @@ pub async fn sweep_all(
 
 pub async fn check_payment(
     db_pool: sqlx::PgPool,
-    payment: &PaymentSqlxShape,
+    invoice: &Invoice,
     client: &reqwest::Client,
     payment_system_config: &PaymentSystemConfig,
 ) -> anyhow::Result<bool> {
     let monero_payment_id = sqlx::query!(
         "SELECT monero_payment_id FROM monero_integrated_payment_ids WHERE payment_id = $1",
-        payment.id
+        invoice.id.0
     )
     .fetch_one(&db_pool)
     .await?
     .monero_payment_id;
-    let expected_amount: u64 = payment.amount.try_into()?; // already in piconer
+    let expected_amount: u64 = invoice.amount.0;
     println!(
         "[Payment ID {}] Checking if the expect amount of {expected_amount} piconero was paid to {}",
-        payment.id, payment.address
+        invoice.id.0, invoice.receiving_payment_address.0
     );
     let body = serde_json::json!({
       "jsonrpc": "2.0",

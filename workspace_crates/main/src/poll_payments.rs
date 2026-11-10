@@ -1,6 +1,9 @@
 use std::time::Duration;
 
-use payment_system_structs::{Address, PaymentId, PaymentSqlxShape, PaymentSystemConfig};
+use cryptocurrencies_stuff::currencies::LTCAtomicUnit;
+use payment_system_structs::{
+    PaymentId, PaymentMethod::{self, Litecoin, Monero}, PaymentSqlxShape, PaymentSystemConfig, ReceivingPaymentAddress,
+};
 use sqlx::postgres::types::PgInterval;
 use tokio_util::sync::CancellationToken;
 
@@ -8,6 +11,65 @@ use crate::{
     fetch_callback_headers, litecoin,
     monero::{self},
 };
+
+pub struct InvoiceId(pub String);
+pub struct StatusUpdateCallbackUrl(pub String);
+pub struct SuccessCallbackUrl(pub String);
+pub struct PaymentAmount(pub u64);
+pub struct Invoice {
+    pub id: InvoiceId,
+    pub status_update_callback_url: StatusUpdateCallbackUrl,
+    pub success_callback_url: SuccessCallbackUrl,
+    pub method: PaymentMethod,
+    pub receiving_payment_address: ReceivingPaymentAddress,
+    pub amount: PaymentAmount,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub completed_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub sweeped_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+pub async fn get_payments(
+    db_pool: &sqlx::PgPool,
+    max_active_invoice_time: u64,
+) -> anyhow::Result<Vec<Invoice>> {
+    let interval = PgInterval {
+        months: 0,
+        days: 0,
+        microseconds: (max_active_invoice_time as i64) * 60 * 1_000_000,
+    };
+    let r = sqlx::query_as!(
+        PaymentSqlxShape,
+        "SELECT * FROM payments  WHERE completed_at IS NULL
+       AND created_at > NOW() - $1::interval",
+        &interval
+    )
+    .fetch_all(db_pool)
+    .await
+    .unwrap_or_default();
+
+    let r = r
+        .iter()
+        .map(|i| {
+            let mapped = Invoice {
+                id: InvoiceId(i.id.clone()),
+                status_update_callback_url: StatusUpdateCallbackUrl(
+                    i.status_update_callback.clone(),
+                ),
+                success_callback_url: SuccessCallbackUrl(i.success_callback.clone()),
+                method: i.method.parse()?,
+                receiving_payment_address: payment_system_structs::ReceivingPaymentAddress(
+                    i.address.clone(),
+                ),
+                amount: PaymentAmount(i.amount.try_into()?),
+                created_at: i.created_at,
+                completed_at: i.completed_at,
+                sweeped_at: i.sweeped_at,
+            };
+            Ok(mapped)
+        })
+        .collect::<anyhow::Result<Vec<Invoice>>>()?;
+
+    Ok(r)
+}
 
 pub async fn poll_payments(
     db_pool: sqlx::PgPool,
@@ -17,32 +79,22 @@ pub async fn poll_payments(
     sleep_between_each_loop: u64,
 ) {
     let rpc = reqwest::Client::new();
-    let interval = PgInterval {
-        months: 0,
-        days: 0,
-        microseconds: (payment_system_config.active_invoice_minutes_since_creation as i64)
-            * 60
-            * 1_000_000,
-    };
 
     loop {
         let db_pool = db_pool.clone();
-        let payments = sqlx::query_as!(
-            PaymentSqlxShape,
-            "SELECT * FROM payments  WHERE completed_at IS NULL
-       AND created_at > NOW() - $1::interval",
-            &interval
+        let payments = get_payments(
+            &db_pool,
+            payment_system_config
+                .active_invoice_minutes_since_creation,
         )
-        .fetch_all(&db_pool)
-        .await
-        .unwrap_or_default();
+        .await.unwrap_or_default();
         println!("Polling for {} payments", payments.len());
-        for payment in payments {
-            match payment.method.as_str() {
-                "monero" => {
+        for invoice in payments {
+            match invoice.method {
+                Monero => {
                     let Ok(paid) = monero::check_payment(
                         db_pool.clone(),
-                        &payment,
+                        &invoice,
                         &rpc,
                         &payment_system_config,
                     )
@@ -60,26 +112,26 @@ pub async fn poll_payments(
                              SET completed_at = NOW() 
                              WHERE id = $1 
                              AND completed_at IS NULL",
-                            &payment.id
+                            &invoice.id.0
                         )
                         .execute(&mut *tx)
                         .await;
                         if result.is_err() {
-                            println!("Failed to mark invoice {} as complete", payment.id);
+                            println!("Failed to mark invoice {} as complete", invoice.id.0);
                             continue;
                         }
                         let Ok(headers) =
-                            fetch_callback_headers(&mut tx, PaymentId(payment.id.clone())).await
+                            fetch_callback_headers(&mut tx, PaymentId(invoice.id.0.clone())).await
                         else {
                             continue;
                         };
 
-                        let mut request = rpc.post(&payment.success_callback);
+                        let mut request = rpc.post(invoice.success_callback_url.0.clone());
                         println!(
                             "Sending success_callback {}, payment_id: {}",
-                            payment.success_callback, payment.id
+                            invoice.success_callback_url.0.clone(), invoice.id.0.clone()
                         );
-                        request = request.body(format!("payment_id={}", payment.id));
+                        request = request.body(format!("payment_id={}", invoice.id.0.clone()));
                         for (key, value) in &headers.0 {
                             request = request.header(key, value);
                         }
@@ -98,8 +150,9 @@ pub async fn poll_payments(
                         let _ = tx.commit().await;
                     }
                 }
-                "litecoin" => {
-                    let Ok(received) = litecoin::check_payment(db_pool.clone(), &payment).await
+                Litecoin => {
+                    let Ok(received) =
+                        litecoin::check_payment(&invoice.receiving_payment_address.clone(), LTCAtomicUnit::from_atomic(invoice.amount.0)).await
                     else {
                         continue;
                     };
@@ -115,24 +168,24 @@ pub async fn poll_payments(
                              SET completed_at = NOW() 
                              WHERE id = $1 
                              AND completed_at IS NULL",
-                                &payment.id
+                                &invoice.id.0
                             )
                             .execute(&mut *tx)
                             .await;
                             let Ok(headers) =
-                                fetch_callback_headers(&mut tx, PaymentId(payment.id.clone()))
+                                fetch_callback_headers(&mut tx, PaymentId(invoice.id.0.clone()))
                                     .await
                             else {
                                 continue;
                             };
 
-                            let mut request = rpc.post(&payment.success_callback);
+                            let mut request = rpc.post(&invoice.success_callback_url.0);
                             tracing::debug!(
                                 "Sending success_callback {}, payment_id: {}",
-                                payment.success_callback,
-                                payment.id
+                                invoice.success_callback_url.0,
+                                invoice.id.0
                             );
-                            request = request.body(format!("payment_id={}", payment.id));
+                            request = request.body(format!("payment_id={}", invoice.id.0));
                             for (key, value) in &headers.0 {
                                 request = request.header(key, value);
                             }
@@ -151,7 +204,7 @@ pub async fn poll_payments(
 
                             let index = match sqlx::query!(
                                 "SELECT index FROM litecoin_address_indexes WHERE payment_id = $1",
-                                &payment.id
+                                &invoice.id.0
                             )
                             .fetch_one(&mut *tx)
                             .await
@@ -166,7 +219,7 @@ pub async fn poll_payments(
                                 db_pool.clone(),
                                 payment_system_config.litecoin_master_seed.clone(),
                                 index as u64,
-                                Address(payment_system_config.litecoin_treasury_address.clone()),
+                                ReceivingPaymentAddress(payment_system_config.litecoin_treasury_address.clone()),
                             )
                             .await;
                             let _ = tx.commit().await;
@@ -174,7 +227,6 @@ pub async fn poll_payments(
                         }
                     }
                 }
-                _ => continue,
             }
             if cancellable_sleep(
                 Duration::from_secs(sleep_between_each_payment_check),

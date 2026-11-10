@@ -130,7 +130,7 @@ async fn validate_token(db_pool: PgPool, token_str: String) -> Result<(), TokenV
 
 use cryptocurrencies_stuff::derive_ltc::derive_ltc_bip84_address;
 use payment_system_structs::{
-    Address, AddressIndex, Amount, NewInvoiceRequest, PaymentId, PaymentInfo, PaymentMethod,
+    ReceivingPaymentAddress, AddressIndex, Amount, NewInvoiceRequest, PaymentId, PaymentInfo, PaymentMethod,
     PaymentSystemConfig,
 };
 use server::http_stuff::http_response::{Charset, HttpResponseData, bad_request_400, ok};
@@ -146,11 +146,11 @@ pub enum APIMethod {
 pub enum GeneratedAddress {
     Litecoin {
         index: AddressIndex,
-        address: Address,
+        address: ReceivingPaymentAddress,
     },
     Monero {
         monero_payment_id: PaymentId,
-        address: Address,
+        address: ReceivingPaymentAddress,
     },
 }
 
@@ -180,7 +180,7 @@ async fn dynamic_address_generation(
             };
             Ok(GeneratedAddress::Litecoin {
                 index: AddressIndex(index),
-                address: Address(address),
+                address: ReceivingPaymentAddress(address),
             })
         }
         PaymentMethod::Monero => {
@@ -208,7 +208,7 @@ fn parse_path(path: &str) -> Option<(&str, &str)> {
 
 pub async fn get_monero_address_and_payment_id(
     rpc_url: &str,
-) -> Result<(Address, PaymentId), String> {
+) -> Result<(ReceivingPaymentAddress, PaymentId), String> {
     let client = reqwest::Client::new();
 
     let body = serde_json::json!({"jsonrpc": "2.0",
@@ -235,7 +235,7 @@ pub async fn get_monero_address_and_payment_id(
         .ok_or_else(|| format!("Unexpected RPC response: {resp}"))?
         .to_string();
 
-    Ok((Address(address), PaymentId(payment_id)))
+    Ok((ReceivingPaymentAddress(address), PaymentId(payment_id)))
 }
 
 #[derive(Clone)]

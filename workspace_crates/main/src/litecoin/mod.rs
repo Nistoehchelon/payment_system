@@ -6,66 +6,25 @@ use bitcoin::{
 };
 use cryptocurrencies_stuff::{currencies::LTCAtomicUnit, derive_ltc::derive_ltc_bip84_address};
 use outscript::parse_bitcoin_based_address;
-use payment_system_structs::PaymentSqlxShape;
 
-pub async fn check_payment(
-    _db_pool: sqlx::PgPool,
-    payment: &PaymentSqlxShape,
-) -> anyhow::Result<bool> {
-    // step 1: get the address where I want the user to pay
-    let payment_address = payment.address.clone();
-    // step 2: receive the balance of the litecoin address
-    let balance = get_balance(&payment_address).await?;
-
-    let required_amount: u64 = payment.amount.try_into()?;
-    let required_amount = LTCAtomicUnit::from_atomic(required_amount);
-    // step 3: if balance is not sufficient, return false
-    let answer = balance >= required_amount;
-    Ok(answer)
-}
+pub mod check_payment;
+pub use check_payment::check_payment;
+pub mod get_address_balance;
+pub use get_address_balance::get_address_balance;
 
 use serde::Deserialize;
 
 use crate::litecoin::sign_and_send_transaction::{broadcast_tx, sign_sweep_transaction};
 
-#[derive(Debug, Deserialize)]
-struct AddressStats {
-    chain_stats: ChainStats,
-}
 
-#[derive(Debug, Deserialize)]
-struct ChainStats {
-    funded_txo_sum: u64,
-    spent_txo_sum: u64,
-}
-
-pub async fn get_balance(address: &str) -> anyhow::Result<LTCAtomicUnit> {
-    let url = format!("https://litecoinspace.org/api/address/{address}");
-    let stats: AddressStats = reqwest::get(&url)
-        .await
-        .context("failed to reach Litecoin Space")?
-        .error_for_status()
-        .context("address not found or API error")?
-        .json()
-        .await
-        .context("failed to parse address stats")?;
-
-    let confirmed = stats
-        .chain_stats
-        .funded_txo_sum
-        .checked_sub(stats.chain_stats.spent_txo_sum)
-        .ok_or_else(|| anyhow!("address stats are inconsistent (spent > funded)"))?;
-
-    Ok(LTCAtomicUnit::from_atomic(confirmed))
-}
 
 pub async fn sweep_balance(
     _db_pool: sqlx::PgPool,
     master_seed: String,
     from_index: u64,
-    to_address: payment_system_structs::Address,
+    to_address: payment_system_structs::ReceivingPaymentAddress,
 ) -> anyhow::Result<String> {
-    let from_address = payment_system_structs::Address(
+    let from_address = payment_system_structs::ReceivingPaymentAddress(
         derive_ltc_bip84_address(&master_seed, from_index).map_err(|e| anyhow!(e))?,
     );
     let fee_estimation_per_virtual_byte =
@@ -121,8 +80,8 @@ pub struct PreparedSweep {
 
 pub async fn prepare_sweep_tx(
     utxos: Vec<Utxo>,
-    origin: payment_system_structs::Address,
-    destination: payment_system_structs::Address,
+    origin: payment_system_structs::ReceivingPaymentAddress,
+    destination: payment_system_structs::ReceivingPaymentAddress,
     fee_per_vbyte: LTCAtomicUnit,
 ) -> anyhow::Result<PreparedSweep> {
     if utxos.is_empty() {
