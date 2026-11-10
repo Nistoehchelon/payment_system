@@ -27,7 +27,7 @@ pub struct Invoice {
     pub completed_at: Option<chrono::DateTime<chrono::Utc>>,
     pub sweeped_at: Option<chrono::DateTime<chrono::Utc>>,
 }
-pub async fn get_payments(
+pub async fn get_active_invoices(
     db_pool: &sqlx::PgPool,
     max_active_invoice_time: u64,
 ) -> anyhow::Result<Vec<Invoice>> {
@@ -82,14 +82,14 @@ pub async fn poll_payments(
 
     loop {
         let db_pool = db_pool.clone();
-        let payments = get_payments(
+        let invoices = get_active_invoices(
             &db_pool,
             payment_system_config
                 .active_invoice_minutes_since_creation,
         )
         .await.unwrap_or_default();
-        println!("Polling for {} payments", payments.len());
-        for invoice in payments {
+        println!("Polling for {} payments", invoices.len());
+        for invoice in invoices {
             match invoice.method {
                 Monero => {
                     let Ok(paid) = monero::check_payment(
