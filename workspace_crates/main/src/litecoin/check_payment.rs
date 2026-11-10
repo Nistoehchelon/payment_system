@@ -7,7 +7,7 @@ pub async fn check_payment(
     payment_receiver_address: &ReceivingPaymentAddress,
     required_amount: LTCAtomicUnit,
 ) -> anyhow::Result<bool> {
-    let balance = get_address_balance(&payment_receiver_address.0).await?;
+    let balance = get_address_balance(payment_receiver_address.clone()).await?;
     // step 3: if balance is not sufficient, return false
     let answer = balance >= required_amount;
     Ok(answer)

@@ -11,12 +11,14 @@ pub mod check_payment;
 pub use check_payment::check_payment;
 pub mod get_address_balance;
 pub use get_address_balance::get_address_balance;
+pub mod get_utxos;
 
 use serde::Deserialize;
 
-use crate::litecoin::sign_and_send_transaction::{broadcast_tx, sign_sweep_transaction};
-
-
+use crate::litecoin::{
+    get_utxos::{Utxo, get_utxos},
+    sign_and_send_transaction::{broadcast_tx, sign_sweep_transaction},
+};
 
 pub async fn sweep_balance(
     _db_pool: sqlx::PgPool,
@@ -29,7 +31,11 @@ pub async fn sweep_balance(
     );
     let fee_estimation_per_virtual_byte =
         get_a_fee_estimate_per_virtual_byte(RecommendedFeeType::FastestFee).await?;
-    let utxos = get_utxos(&from_address.0).await?;
+    let utxos = get_utxos(&from_address.0)
+        .await?
+        .into_iter()
+        .filter(|u| u.status.confirmed)
+        .collect();
     let prepared_transaction = prepare_sweep_tx(
         utxos,
         from_address,
@@ -42,33 +48,6 @@ pub async fn sweep_balance(
     let res = broadcast_tx(signed_tx).await;
     tracing::debug!("Res: {res:?}");
     Ok("TX Sent".to_string())
-}
-#[derive(Debug, Clone, serde::Deserialize)]
-pub struct Utxo {
-    pub txid: String,
-    pub vout: u32,
-    pub value: u64,
-    pub status: UtxoStatus,
-}
-
-#[derive(Debug, Clone, serde::Deserialize)]
-pub struct UtxoStatus {
-    pub confirmed: bool,
-}
-
-pub async fn get_utxos(address: &str) -> anyhow::Result<Vec<Utxo>> {
-    let url = format!("https://litecoinspace.org/api/address/{address}/utxo");
-    let utxos: Vec<Utxo> = reqwest::get(&url)
-        .await
-        .context("failed to reach UTXO endpoint")?
-        .error_for_status()
-        .context("UTXO endpoint returned an error")?
-        .json()
-        .await
-        .context("failed to parse UTXOs")?;
-
-    // Only use confirmed UTXOs to avoid spending unconfirmed outputs
-    Ok(utxos.into_iter().filter(|u| u.status.confirmed).collect())
 }
 
 #[derive(Debug, Clone)]
