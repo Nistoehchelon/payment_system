@@ -10,7 +10,7 @@ use outscript::parse_bitcoin_based_address;
 pub mod check_payment;
 pub use check_payment::check_payment;
 pub mod get_address_balance;
-pub use get_address_balance::get_address_balance;
+pub use get_address_balance::get_address_balance_for_small_payments;
 pub mod get_utxos;
 
 use serde::Deserialize;

@@ -4,10 +4,56 @@ use payment_system_structs::ReceivingPaymentAddress;
 
 use crate::litecoin::get_utxos::Utxo;
 
+#[derive(Debug, serde::Deserialize)]
+pub struct AddressStats {
+    chain_stats: ChainStats,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct ChainStats {
+    funded_txo_sum: u64,
+    spent_txo_sum: u64,
+}
+
+#[tracing::instrument]
+pub async fn get_address_balance_for_small_payments(
+    address: ReceivingPaymentAddress,
+) -> anyhow::Result<LTCAtomicUnit> {
+    let url = format!("https://litecoinspace.org/api/address/{address}");
+    let stats: AddressStats = match reqwest::get(&url)
+        .await
+        .context("failed to reach Litecoin Space")?
+        .error_for_status()
+        .context("address not found or API error")?
+        .json()
+        .await
+        .context("failed to parse address stats")
+    {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::error!("{e}");
+            return Err(e);
+        }
+    };
+
+    let confirmed = stats
+        .chain_stats
+        .funded_txo_sum
+        .checked_sub(stats.chain_stats.spent_txo_sum)
+        .ok_or_else(|| anyhow::anyhow!("address stats are inconsistent (spent > funded)"))?;
+
+    tracing::debug!("Balance: {confirmed}");
+    Ok(LTCAtomicUnit::from_atomic(confirmed))
+}
+
+// Allow for filtering based on confirmations, for bigger payments if I want to ensure validity of the transfer. 
 pub async fn get_address_balance(
     address: ReceivingPaymentAddress,
     min_confirmations: u64,
 ) -> anyhow::Result<LTCAtomicUnit> {
+    if min_confirmations == 1 {
+        return get_address_balance_for_small_payments(address).await;
+    }
     let client = reqwest::Client::new();
     let tip_height: u64 = client
         .get("https://litecoinspace.org/api/blocks/tip/height")
