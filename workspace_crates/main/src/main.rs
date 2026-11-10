@@ -159,23 +159,30 @@ async fn dynamic_address_generation(
     conn: &mut PgConnection,
     psc: &PaymentSystemConfig,
     m: &PaymentMethod,
-) -> Result<GeneratedAddress, String> {
+) -> anyhow::Result<GeneratedAddress, String> {
     match m {
         PaymentMethod::Litecoin => {
-            let Ok(Some(index)) = sqlx::query_scalar!(
+            let index = match sqlx::query_scalar!(
                 "SELECT COUNT(*) FROM invoices WHERE method = $1",
                 m.to_string()
             )
             .fetch_one(&mut *conn)
             .await
-            else {
-                println!("Could not get count {}", m);
-                return Err("...".to_string());
+            {
+                Ok(Some(i)) => i,
+                Err(e) => {
+                    tracing::debug!("{e}");
+                    return Err(format!("{e}"));
+                }
+                Ok(None) => {
+                    tracing::debug!("dynamic_address_generation LTC 0 invoices");
+                    return Err("dynamic_address_generation LTC 0 invoices".to_string());
+                }
             };
 
             let index = index as u64;
             let Ok(address) = derive_ltc_bip84_address(&psc.litecoin_master_seed, index) else {
-                println!("Litecoin addr error");
+                tracing::debug!("Litecoin addr error");
                 return Err("Couldn't derive litecoin".to_string());
             };
             Ok(GeneratedAddress::Litecoin {
