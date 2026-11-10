@@ -2,7 +2,9 @@ use std::time::Duration;
 
 use cryptocurrencies_stuff::currencies::LTCAtomicUnit;
 use payment_system_structs::{
-    PaymentId, PaymentMethod::{self, Litecoin, Monero}, PaymentSqlxShape, PaymentSystemConfig, ReceivingPaymentAddress,
+    PaymentId,
+    PaymentMethod::{self, Litecoin, Monero},
+    PaymentSqlxShape, PaymentSystemConfig, ReceivingPaymentAddress,
 };
 use sqlx::postgres::types::PgInterval;
 use tokio_util::sync::CancellationToken;
@@ -84,10 +86,10 @@ pub async fn poll_payments(
         let db_pool = db_pool.clone();
         let invoices = get_active_invoices(
             &db_pool,
-            payment_system_config
-                .active_invoice_minutes_since_creation,
+            payment_system_config.active_invoice_minutes_since_creation,
         )
-        .await.unwrap_or_default();
+        .await
+        .unwrap_or_default();
         println!("Polling for {} payments", invoices.len());
         for invoice in invoices {
             match invoice.method {
@@ -129,7 +131,8 @@ pub async fn poll_payments(
                         let mut request = rpc.post(invoice.success_callback_url.0.clone());
                         println!(
                             "Sending success_callback {}, payment_id: {}",
-                            invoice.success_callback_url.0.clone(), invoice.id.0.clone()
+                            invoice.success_callback_url.0.clone(),
+                            invoice.id.0.clone()
                         );
                         request = request.body(format!("payment_id={}", invoice.id.0.clone()));
                         for (key, value) in &headers.0 {
@@ -151,8 +154,11 @@ pub async fn poll_payments(
                     }
                 }
                 Litecoin => {
-                    let Ok(received) =
-                        litecoin::check_payment(&invoice.receiving_payment_address.clone(), LTCAtomicUnit::from_atomic(invoice.amount.0)).await
+                    let Ok(received) = litecoin::check_payment(
+                        &invoice.receiving_payment_address.clone(),
+                        LTCAtomicUnit::from_atomic(invoice.amount.0),
+                    )
+                    .await
                     else {
                         continue;
                     };
@@ -219,7 +225,9 @@ pub async fn poll_payments(
                                 db_pool.clone(),
                                 payment_system_config.litecoin_master_seed.clone(),
                                 index as u64,
-                                ReceivingPaymentAddress(payment_system_config.litecoin_treasury_address.clone()),
+                                ReceivingPaymentAddress(
+                                    payment_system_config.litecoin_treasury_address.clone(),
+                                ),
                             )
                             .await;
                             let _ = tx.commit().await;
