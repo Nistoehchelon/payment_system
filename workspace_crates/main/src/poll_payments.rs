@@ -14,65 +14,6 @@ use crate::{
     monero::{self},
 };
 
-pub struct InvoiceId(pub String);
-pub struct StatusUpdateCallbackUrl(pub String);
-pub struct SuccessCallbackUrl(pub String);
-pub struct PaymentAmount(pub u64);
-pub struct Invoice {
-    pub id: InvoiceId,
-    pub status_update_callback_url: StatusUpdateCallbackUrl,
-    pub success_callback_url: SuccessCallbackUrl,
-    pub method: PaymentMethod,
-    pub receiving_payment_address: ReceivingPaymentAddress,
-    pub amount: PaymentAmount,
-    pub created_at: chrono::DateTime<chrono::Utc>,
-    pub completed_at: Option<chrono::DateTime<chrono::Utc>>,
-    pub sweeped_at: Option<chrono::DateTime<chrono::Utc>>,
-}
-pub async fn get_active_invoices(
-    db_pool: &sqlx::PgPool,
-    max_active_invoice_time: u64,
-) -> anyhow::Result<Vec<Invoice>> {
-    let interval = PgInterval {
-        months: 0,
-        days: 0,
-        microseconds: (max_active_invoice_time as i64) * 60 * 1_000_000,
-    };
-    let r = sqlx::query_as!(
-        PaymentSqlxShape,
-        "SELECT * FROM payments  WHERE completed_at IS NULL
-       AND created_at > NOW() - $1::interval",
-        &interval
-    )
-    .fetch_all(db_pool)
-    .await
-    .unwrap_or_default();
-
-    let r = r
-        .iter()
-        .map(|i| {
-            let mapped = Invoice {
-                id: InvoiceId(i.id.clone()),
-                status_update_callback_url: StatusUpdateCallbackUrl(
-                    i.status_update_callback.clone(),
-                ),
-                success_callback_url: SuccessCallbackUrl(i.success_callback.clone()),
-                method: i.method.parse()?,
-                receiving_payment_address: payment_system_structs::ReceivingPaymentAddress(
-                    i.address.clone(),
-                ),
-                amount: PaymentAmount(i.amount.try_into()?),
-                created_at: i.created_at,
-                completed_at: i.completed_at,
-                sweeped_at: i.sweeped_at,
-            };
-            Ok(mapped)
-        })
-        .collect::<anyhow::Result<Vec<Invoice>>>()?;
-
-    Ok(r)
-}
-
 pub async fn poll_payments(
     db_pool: sqlx::PgPool,
     payment_system_config: PaymentSystemConfig,
@@ -110,7 +51,7 @@ pub async fn poll_payments(
                     if paid || payment_system_config.confirm_all_for_testing_purposes {
                         let _ = monero::sweep_all(&rpc, &payment_system_config).await;
                         let result = sqlx::query!(
-                            "UPDATE payments 
+                            "UPDATE invoices 
                              SET completed_at = NOW() 
                              WHERE id = $1 
                              AND completed_at IS NULL",
@@ -170,7 +111,7 @@ pub async fn poll_payments(
                             };
                             // mark as complete
                             let _result = sqlx::query!(
-                                "UPDATE payments 
+                                "UPDATE invoices 
                              SET completed_at = NOW() 
                              WHERE id = $1 
                              AND completed_at IS NULL",
@@ -208,28 +149,34 @@ pub async fn poll_payments(
                                 resp
                             );
 
-                            let index = match sqlx::query!(
+                            let _index: u64 = match sqlx::query!(
                                 "SELECT index FROM litecoin_address_indexes WHERE payment_id = $1",
                                 &invoice.id.0
                             )
                             .fetch_one(&mut *tx)
                             .await
                             {
-                                Ok(i) => i.index,
+                                Ok(i) => match i.index.try_into() {
+                                    Ok(i) => i,
+                                    Err(e) => {
+                                        tracing::debug!("Err {e}");
+                                        continue;
+                                    }
+                                },
                                 Err(e) => {
                                     tracing::debug!("{e:?}");
                                     continue;
                                 }
                             };
-                            let _ = litecoin::sweep_balance(
-                                db_pool.clone(),
-                                payment_system_config.litecoin_master_seed.clone(),
-                                index as u64,
-                                ReceivingPaymentAddress(
-                                    payment_system_config.litecoin_treasury_address.clone(),
-                                ),
-                            )
-                            .await;
+                            // let _ = litecoin::sweep_balance(
+                            //     db_pool.clone(),
+                            //     payment_system_config.litecoin_master_seed.clone(),
+                            //     index as u64,
+                            //     ReceivingPaymentAddress(
+                            //         payment_system_config.litecoin_treasury_address.clone(),
+                            //     ),
+                            // )
+                            // .await;
                             let _ = tx.commit().await;
                             // That's it, right?
                         }
@@ -260,12 +207,73 @@ pub async fn poll_payments(
     }
 }
 
+#[tracing::instrument]
 async fn cancellable_sleep(
     duration: Duration,
     cancellation_token: &CancellationToken,
 ) -> Result<(), ()> {
+    tracing::debug!("Enter");
     tokio::select! {
         _ = tokio::time::sleep(duration) => Ok(()),
         _ = cancellation_token.cancelled() => Err(()),
     }
+}
+
+pub struct InvoiceId(pub String);
+pub struct StatusUpdateCallbackUrl(pub String);
+pub struct SuccessCallbackUrl(pub String);
+pub struct PaymentAmount(pub u64);
+pub struct Invoice {
+    pub id: InvoiceId,
+    pub status_update_callback_url: StatusUpdateCallbackUrl,
+    pub success_callback_url: SuccessCallbackUrl,
+    pub method: PaymentMethod,
+    pub receiving_payment_address: ReceivingPaymentAddress,
+    pub amount: PaymentAmount,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub completed_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub sweeped_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+pub async fn get_active_invoices(
+    db_pool: &sqlx::PgPool,
+    max_active_invoice_time: u64,
+) -> anyhow::Result<Vec<Invoice>> {
+    let interval = PgInterval {
+        months: 0,
+        days: 0,
+        microseconds: (max_active_invoice_time as i64) * 60 * 1_000_000,
+    };
+    let r = sqlx::query_as!(
+        PaymentSqlxShape,
+        "SELECT * FROM invoices  WHERE completed_at IS NULL
+       AND created_at > NOW() - $1::interval",
+        &interval
+    )
+    .fetch_all(db_pool)
+    .await
+    .unwrap_or_default();
+
+    let r = r
+        .iter()
+        .map(|i| {
+            let mapped = Invoice {
+                id: InvoiceId(i.id.clone()),
+                status_update_callback_url: StatusUpdateCallbackUrl(
+                    i.status_update_callback_url.clone(),
+                ),
+                success_callback_url: SuccessCallbackUrl(i.success_callback_url.clone()),
+                method: i.method.parse()?,
+                receiving_payment_address: payment_system_structs::ReceivingPaymentAddress(
+                    i.receiving_payment_address.clone(),
+                ),
+                amount: PaymentAmount(i.amount.try_into()?),
+                created_at: i.created_at,
+                completed_at: i.completed_at,
+                sweeped_at: i.sweeped_at,
+            };
+            Ok(mapped)
+        })
+        .collect::<anyhow::Result<Vec<Invoice>>>()?;
+
+    Ok(r)
 }

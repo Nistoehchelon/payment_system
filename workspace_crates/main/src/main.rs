@@ -72,7 +72,7 @@ async fn deny_if_too_many_active_invoices(
             * 1_000_000,
     };
     let count = match sqlx::query_scalar!(
-        "SELECT COUNT(*) FROM payments WHERE created_at > NOW() - $1::interval",
+        "SELECT COUNT(*) FROM invoices WHERE created_at > NOW() - $1::interval",
         interval
     )
     .fetch_one(&mut **tx)
@@ -163,7 +163,7 @@ async fn dynamic_address_generation(
     match m {
         PaymentMethod::Litecoin => {
             let Ok(Some(index)) = sqlx::query_scalar!(
-                "SELECT COUNT(*) FROM payments WHERE method = $1",
+                "SELECT COUNT(*) FROM invoices WHERE method = $1",
                 m.to_string()
             )
             .fetch_one(&mut *conn)
@@ -293,7 +293,7 @@ impl Router {
 
                 println!("Invoice: {invoice_req:#?}");
                 let i64_amount: i64 = ok_or_400!(invoice_req.amount_atomic.try_into());
-                let payment_id = ok_or_400!(sqlx::query!("INSERT INTO payments (status_update_callback, success_callback, method, address, amount) VALUES($1, $2, $3, $4, $5::bigint) RETURNING id", invoice_req.status_update_callback,  invoice_req.success_callback,  invoice_req.method.to_string(), "to_do", i64_amount).fetch_one(&mut *tx).await, "sqlx error").id;
+                let payment_id = ok_or_400!(sqlx::query!("INSERT INTO invoices (status_update_callback_url, success_callback_url, method, receiving_payment_address, amount) VALUES($1, $2, $3, $4, $5::bigint) RETURNING id", invoice_req.status_update_callback_url,  invoice_req.success_callback_url,  invoice_req.method.to_string(), "to_do", i64_amount).fetch_one(&mut *tx).await, "sqlx error").id;
                 for (k, v) in invoice_req.callback_headers.0.iter() {
                     ok_or_400!(sqlx::query!("INSERT INTO callback_headers (payment_id, key, value) VALUES ($1, $2, $3)", payment_id.clone(), k, v, ).execute(&mut *tx).await);
                 }
@@ -322,7 +322,7 @@ impl Router {
                 };
                 ok_or_400!(
                     sqlx::query!(
-                        "UPDATE payments SET address = $1 WHERE id = $2",
+                        "UPDATE invoices SET receiving_payment_address = $1 WHERE id = $2",
                         address.0,
                         payment_id
                     )

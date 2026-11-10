@@ -29,10 +29,10 @@ pub struct PaymentSystemConfig {
 pub struct PaymentSqlxShape {
     pub primary_key: i64,
     pub id: String,
-    pub status_update_callback: String,
-    pub success_callback: String,
+    pub status_update_callback_url: String,
+    pub success_callback_url: String,
     pub method: String,
-    pub address: String,
+    pub receiving_payment_address: String,
     pub amount: i64,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub completed_at: Option<chrono::DateTime<chrono::Utc>>,
@@ -55,8 +55,8 @@ pub struct NewInvoiceRequest {
     pub invoice_id: String,
     pub method: PaymentMethod,
     pub amount_atomic: u64,
-    pub success_callback: String,
-    pub status_update_callback: String,
+    pub success_callback_url: String,
+    pub status_update_callback_url: String,
     pub callback_headers: CallbackHeaders,
 }
 

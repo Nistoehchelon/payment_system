@@ -17,14 +17,14 @@ CREATE TABLE monero_integrated_payment_ids (
     payment_id        text NOT NULL
 );
 
-CREATE TABLE payments (
+CREATE TABLE invoices (
     primary_key         bigserial PRIMARY KEY,
     id                  text        NOT NULL DEFAULT gen_random_uuid()::text,
-    status_update_callback text     NOT NULL,
-    success_callback    text        NOT NULL,
+    status_update_callback_url text     NOT NULL,
+    success_callback_url    text        NOT NULL,
     method              text        NOT NULL,
     amount              text        NOT NULL,
-    address             text        NOT NULL,
+    receiving_payment_address             text        NOT NULL,
     created_at          timestamptz NOT NULL DEFAULT now(),
     completed_at        timestamptz,
     sweeped_at          timestamptz
