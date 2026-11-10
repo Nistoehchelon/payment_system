@@ -178,7 +178,7 @@ pub async fn prepare_sweep_tx(
     Ok(PreparedSweep {
         tx,
         input_values: utxos.iter().map(|u| Amount::from_sat(u.value)).collect(),
-        from_script_pubkey: from_script_pubkey,
+        from_script_pubkey,
     })
 }
 
