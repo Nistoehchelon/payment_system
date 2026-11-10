@@ -130,8 +130,8 @@ async fn validate_token(db_pool: PgPool, token_str: String) -> Result<(), TokenV
 
 use cryptocurrencies_stuff::derive_ltc::derive_ltc_bip84_address;
 use payment_system_structs::{
-    ReceivingPaymentAddress, AddressIndex, Amount, NewInvoiceRequest, PaymentId, PaymentInfo, PaymentMethod,
-    PaymentSystemConfig,
+    AddressIndex, Amount, NewInvoiceRequest, PaymentId, PaymentInfo, PaymentMethod,
+    PaymentSystemConfig, ReceivingPaymentAddress,
 };
 use server::http_stuff::http_response::{Charset, HttpResponseData, bad_request_400, ok};
 use sqlx::{PgConnection, PgPool, Pool, Postgres, Transaction};
@@ -273,7 +273,7 @@ impl Router {
         );
         let method = ok_or_400!(
             APIMethod::from_str(method_str),
-            "Could not parse method".to_string()
+            format!("Could not parse method {method_str}")
         );
         println!("Method: {method:#?}");
         match method {

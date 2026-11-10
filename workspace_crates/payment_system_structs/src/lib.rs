@@ -52,7 +52,6 @@ pub enum PaymentMethod {
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct NewInvoiceRequest {
-    pub invoice_id: String,
     pub method: PaymentMethod,
     pub amount_atomic: u64,
     pub success_callback_url: String,

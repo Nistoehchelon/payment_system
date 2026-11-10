@@ -5,7 +5,7 @@ macro_rules! ok_or_400 {
             Ok(v) => v,
             Err(e) => {
                 $(
-                    println!("Err: {:#?}, Msg: {:#?}", e, $msg);
+                    tracing::error!("Err: {:#?}, Msg: {:#?}", e, $msg);
                 )?
                 return server::http_stuff::http_response::bad_request_400();
             }
