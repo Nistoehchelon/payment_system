@@ -31,8 +31,6 @@ pub async fn sweep_all(
     anyhow::Ok(())
 }
 
-
-
 pub async fn check_payment(
     db_pool: sqlx::PgPool,
     payment: &PaymentSqlxShape,

@@ -99,11 +99,7 @@ pub async fn poll_payments(
                     }
                 }
                 "litecoin" => {
-                    let Ok(received) = litecoin::check_payment(
-                        db_pool.clone(),
-                        &payment,
-                    )
-                    .await
+                    let Ok(received) = litecoin::check_payment(db_pool.clone(), &payment).await
                     else {
                         continue;
                     };
@@ -166,7 +162,13 @@ pub async fn poll_payments(
                                     continue;
                                 }
                             };
-                             let _ = litecoin::sweep_balance(db_pool.clone(), payment_system_config.litecoin_master_seed.clone(), index as u64, Address(payment_system_config.litecoin_treasury_address.clone())).await;
+                            let _ = litecoin::sweep_balance(
+                                db_pool.clone(),
+                                payment_system_config.litecoin_master_seed.clone(),
+                                index as u64,
+                                Address(payment_system_config.litecoin_treasury_address.clone()),
+                            )
+                            .await;
                             let _ = tx.commit().await;
                             // That's it, right?
                         }

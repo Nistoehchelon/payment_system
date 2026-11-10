@@ -82,7 +82,6 @@ pub async fn broadcast_tx(tx: SignedTransaction) -> anyhow::Result<String> {
     let body = resp.text().await.context("failed to read broadcast body")?;
 
     if !status.is_success() {
-        
         bail!("broadcast rejected ({}): {}", status, body.trim());
     }
     Ok(body.trim().to_string())

@@ -31,8 +31,7 @@ pub fn find_ltc_bip84_index(
     }
 
     // 1. Parse mnemonic and derive the BIP39 seed (no passphrase).
-    let mnemonic = Mnemonic::from_str(master_seed)
-        .map_err(|e| format!("Invalid mnemonic: {e}"))?;
+    let mnemonic = Mnemonic::from_str(master_seed).map_err(|e| format!("Invalid mnemonic: {e}"))?;
     let seed = mnemonic.to_seed("");
 
     // 2. Master extended private key from the 64-byte seed.
