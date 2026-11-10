@@ -446,7 +446,7 @@ dependencies = [
 [[package]]
 name = "config_reader"
 version = "0.1.0"
-source = "git+ssh://git@github.com/Nistoehchelonmneugaphy/server_2_only.git#122e7ca01aec0b46247060ab42cb31dcefe5d16c"
+source = "git+https://github.com/Nistoehchelonmneugaphy/server_2_only.git#122e7ca01aec0b46247060ab42cb31dcefe5d16c"
 dependencies = [
  "config",
  "dotenvy",
@@ -637,7 +637,7 @@ dependencies = [
 [[package]]
 name = "cryptocurrencies_stuff"
 version = "0.1.0"
-source = "git+ssh://git@github.com/Nistoehchelonmneugaphy/cryptocurrencies_stuff.git#b4bbb726d85f0ae147ead6a39191aef5c8f40204"
+source = "git+https://github.com/Nistoehchelonmneugaphy/cryptocurrencies_stuff.git#b4bbb726d85f0ae147ead6a39191aef5c8f40204"
 dependencies = [
  "anyhow",
  "bech32 0.12.0",
@@ -800,7 +800,7 @@ dependencies = [
 [[package]]
 name = "encoding"
 version = "0.1.0"
-source = "git+ssh://git@github.com/Nistoehchelonmneugaphy/server_2_only.git#122e7ca01aec0b46247060ab42cb31dcefe5d16c"
+source = "git+https://github.com/Nistoehchelonmneugaphy/server_2_only.git#122e7ca01aec0b46247060ab42cb31dcefe5d16c"
 dependencies = [
  "urlencoding",
 ]
@@ -871,7 +871,7 @@ dependencies = [
 [[package]]
 name = "error_structs"
 version = "0.1.0"
-source = "git+ssh://git@github.com/Nistoehchelonmneugaphy/server_2_only.git#122e7ca01aec0b46247060ab42cb31dcefe5d16c"
+source = "git+https://github.com/Nistoehchelonmneugaphy/server_2_only.git#122e7ca01aec0b46247060ab42cb31dcefe5d16c"
 dependencies = [
  "tracing",
 ]
@@ -1260,7 +1260,7 @@ dependencies = [
 [[package]]
 name = "http_stuff"
 version = "0.1.0"
-source = "git+ssh://git@github.com/Nistoehchelonmneugaphy/server_2_only.git#122e7ca01aec0b46247060ab42cb31dcefe5d16c"
+source = "git+https://github.com/Nistoehchelonmneugaphy/server_2_only.git#122e7ca01aec0b46247060ab42cb31dcefe5d16c"
 dependencies = [
  "config_reader",
  "encoding",
@@ -2538,7 +2538,7 @@ dependencies = [
 [[package]]
 name = "server"
 version = "0.1.0"
-source = "git+ssh://git@github.com/Nistoehchelonmneugaphy/server_2_only.git#122e7ca01aec0b46247060ab42cb31dcefe5d16c"
+source = "git+https://github.com/Nistoehchelonmneugaphy/server_2_only.git#122e7ca01aec0b46247060ab42cb31dcefe5d16c"
 dependencies = [
  "config_reader",
  "dotenvy",
@@ -2557,7 +2557,7 @@ dependencies = [
 [[package]]
 name = "server_config"
 version = "0.1.0"
-source = "git+ssh://git@github.com/Nistoehchelonmneugaphy/server_2_only.git#122e7ca01aec0b46247060ab42cb31dcefe5d16c"
+source = "git+https://github.com/Nistoehchelonmneugaphy/server_2_only.git#122e7ca01aec0b46247060ab42cb31dcefe5d16c"
 dependencies = [
  "humantime-serde",
  "serde",
@@ -3399,7 +3399,7 @@ checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 [[package]]
 name = "url"
 version = "0.1.0"
-source = "git+ssh://git@github.com/Nistoehchelonmneugaphy/server_2_only.git#122e7ca01aec0b46247060ab42cb31dcefe5d16c"
+source = "git+https://github.com/Nistoehchelonmneugaphy/server_2_only.git#122e7ca01aec0b46247060ab42cb31dcefe5d16c"
 dependencies = [
  "encoding",
  "indexmap",

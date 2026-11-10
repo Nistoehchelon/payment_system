@@ -22,7 +22,7 @@ payment_system_structs = { path =  "workspace_crates/payment_system_structs" }
 app_executable_version = { path =  "workspace_crates/app_executable_version" }
 main = { path =  "workspace_crates/main" }
 tokio = { version = "1.54.1", features = ["full", "macros", "net", "rt-multi-thread", "time", "tokio-macros", "tracing"] }
-server = { git = "ssh://git@github.com/Nistoehchelonmneugaphy/server_2_only.git"}
+server = { git = "https://github.com/Nistoehchelonmneugaphy/server_2_only.git"}
 dotenvy = "0.15.7"
 sqlx = { version = "0.9.0", features = ["chrono","migrate", "postgres", "macros", "runtime-tokio", "tls-rustls-aws-lc-rs"] }
 reqwest = { version = "0.13.5", features = ["json"] }
@@ -34,7 +34,7 @@ anyhow = "1.0.104"
 derive_more = { version = "2.1.1", features = ["display", "from", "into"] }
 chrono = { version = "0.4.45" }
 tracing = "0.1.44"
-cryptocurrencies_stuff = { git = "ssh://git@github.com/Nistoehchelonmneugaphy/cryptocurrencies_stuff.git" }
+cryptocurrencies_stuff = { git = "https://github.com/Nistoehchelonmneugaphy/cryptocurrencies_stuff.git" }
 tokio-util = { version = "0.7.20"}
 test-log = "0.2.21"
 bitcoin = "0.32.102"
