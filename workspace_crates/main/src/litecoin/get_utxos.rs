@@ -11,11 +11,9 @@ pub struct Utxo {
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct UtxoStatus {
     pub confirmed: bool,
-     #[serde(default)]
+    #[serde(default)]
     pub block_height: Option<u64>,
 }
-
-
 
 pub async fn get_utxos(address: &str) -> anyhow::Result<Vec<Utxo>> {
     let url = format!("https://litecoinspace.org/api/address/{address}/utxo");

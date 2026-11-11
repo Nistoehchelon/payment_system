@@ -46,7 +46,7 @@ pub async fn get_address_balance_for_small_payments(
     Ok(LTCAtomicUnit::from_atomic(confirmed))
 }
 
-// Allow for filtering based on confirmations, for bigger payments if I want to ensure validity of the transfer. 
+// Allow for filtering based on confirmations, for bigger payments if I want to ensure validity of the transfer.
 pub async fn get_address_balance(
     address: ReceivingPaymentAddress,
     min_confirmations: u64,

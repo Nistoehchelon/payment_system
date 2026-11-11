@@ -1,8 +1,7 @@
 pub mod transfer_to_treasury_wallet_after_receiving_payment;
 use anyhow::{Context, anyhow};
 use bitcoin::{
-    ScriptBuf, Transaction, TxIn, TxOut, Witness, absolute::LockTime,
-    transaction::Version,
+    ScriptBuf, Transaction, TxIn, TxOut, Witness, absolute::LockTime, transaction::Version,
 };
 use cryptocurrencies_stuff::currencies::LTCAtomicUnit;
 
@@ -13,7 +12,6 @@ pub use get_address_balance::get_address_balance_for_small_payments;
 pub mod get_utxos;
 
 use serde::Deserialize;
-
 
 pub fn calculate_fee(fee_per_vbyte: LTCAtomicUnit, vsize: u64) -> anyhow::Result<LTCAtomicUnit> {
     fee_per_vbyte

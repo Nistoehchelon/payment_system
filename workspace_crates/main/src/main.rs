@@ -181,7 +181,7 @@ async fn dynamic_address_generation(
             };
 
             let index = index as u64;
-            let address =  derive_ltc_bip84_address(&psc.litecoin_master_seed, index)?;
+            let address = derive_ltc_bip84_address(&psc.litecoin_master_seed, index)?;
             Ok(GeneratedAddress::Litecoin {
                 index: AddressIndex(index),
                 address: ReceivingPaymentAddress(address),
