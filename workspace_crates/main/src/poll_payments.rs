@@ -120,7 +120,7 @@ async fn process_invoice_that_was_just_paid(
 }
 
 async fn successful_payment(tx: &mut sqlx::PgConnection, invoice: Invoice) -> anyhow::Result<()> {
-    let _update_result = sqlx::query!(
+    sqlx::query!(
         "UPDATE invoices 
                              SET completed_at = NOW() 
                              WHERE id = $1 
