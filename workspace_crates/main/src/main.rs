@@ -270,7 +270,7 @@ impl Router {
             "x-api-token header not found in request"
         )
         .to_string();
-        println!("User used token {token}");
+        tracing::debug!("User used token {token}"); // Leaks token into consoles, in production I wanna remove this? Or just not show debug logs? Use debug assertions?
         ok_or_400!(
             validate_token(db_pool.clone(), token.clone()).await,
             format!("Could not validate token {token}")
@@ -279,7 +279,7 @@ impl Router {
             APIMethod::from_str(method_str),
             format!("Could not parse method {method_str}")
         );
-        println!("Method: {method:#?}");
+        tracing::debug!("Method: {method:#?}");
         match method {
             APIMethod::NewInvoice => {
                 let mut tx = ok_or_400!(db_pool.begin().await, String::new());
