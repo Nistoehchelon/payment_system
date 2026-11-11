@@ -66,7 +66,7 @@ pub async fn poll_payments(
                 }
             };
             if paid {
-                match process_invoice_that_was_just_paid(
+                if let Err(e) = process_invoice_that_was_just_paid(
                     &payment_system_config,
                     &rpc,
                     &db_pool,
@@ -74,11 +74,8 @@ pub async fn poll_payments(
                 )
                 .await
                 {
-                    Err(e) => {
-                        tracing::error!("{e:?}");
-                    }
-                    _ => {}
-                };
+                    tracing::error!("{e}");
+                }
             }
             if cancellable_sleep(
                 Duration::from_secs(sleep_between_each_payment_check),
