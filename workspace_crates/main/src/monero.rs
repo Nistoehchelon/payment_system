@@ -40,7 +40,7 @@ pub async fn check_payment(
     payment_system_config: &PaymentSystemConfig,
 ) -> anyhow::Result<bool> {
     let monero_payment_id = sqlx::query!(
-        "SELECT monero_payment_id FROM monero_integrated_payment_ids WHERE payment_id = $1",
+        "SELECT monero_payment_id FROM monero_integrated_payment_ids WHERE invoice_id = $1",
         invoice.id.0
     )
     .fetch_one(&db_pool)

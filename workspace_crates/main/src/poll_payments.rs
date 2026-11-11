@@ -160,15 +160,23 @@ async fn send_success_webhook(
 
 async fn sweep(
     invoice: Invoice,
-    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    conn: &mut sqlx::PgConnection,
     payment_system_config: PaymentSystemConfig,
 ) -> anyhow::Result<()> {
     let rpc_client = reqwest::Client::new();
     match invoice.method {
         Litecoin => {
+            let from_index: u64 = sqlx::query!(
+                "SELECT index FROM litecoin_address_indexes WHERE invoice_id = $1",
+                invoice.id.0
+            )
+            .fetch_one(&mut *conn)
+            .await?
+            .index
+            .try_into()?;
             litecoin::transfer_to_treasury_wallet_after_receiving_payment::sweep_balance(
                 payment_system_config.litecoin_master_seed.clone(),
-                0,
+                from_index,
                 CryptoAddress(payment_system_config.litecoin_treasury_address.clone()),
             )
             .await?;
@@ -184,7 +192,7 @@ async fn sweep(
                              AND sweeped_at IS NULL",
         &invoice.id.0
     )
-    .execute(&mut **tx)
+    .execute(conn)
     .await?;
     Ok(())
 }

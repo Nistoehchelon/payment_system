@@ -7,14 +7,14 @@ CREATE TABLE callback_headers (
 
 CREATE TABLE litecoin_address_indexes (
     primary_key bigserial PRIMARY KEY,
-    payment_id  text   NOT NULL,
+    invoice_id  text   NOT NULL,
     index       bigint NOT NULL
 );
 
 CREATE TABLE monero_integrated_payment_ids (
     primary_key       bigserial PRIMARY KEY,
     monero_payment_id text NOT NULL,
-    payment_id        text NOT NULL
+    invoice_id        text NOT NULL
 );
 
 CREATE TABLE invoices (
