@@ -96,15 +96,15 @@ pub async fn sweep_balance(
         cryptocurrencies_stuff::derive_ltc::derive_ltc_bip84_address(&master_seed, from_index)
             .map_err(|e| anyhow!(e))?,
     );
-    let fee_estimation_per_virtual_byte = crate::litecoin::get_a_fee_estimate_per_virtual_byte(
-        crate::litecoin::RecommendedFeeType::FastestFee,
-    )
-    .await?;
     let utxos = crate::litecoin::get_utxos::get_utxos(&from_address.0)
         .await?
         .into_iter()
         .filter(|u| u.status.confirmed)
         .collect();
+    let fee_estimation_per_virtual_byte = crate::litecoin::get_a_fee_estimate_per_virtual_byte(
+        crate::litecoin::RecommendedFeeType::FastestFee,
+    )
+    .await?;
     let prepared_transaction = prepare_sweep_tx(
         utxos,
         from_address,
@@ -114,6 +114,7 @@ pub async fn sweep_balance(
     .await?;
 
     let signed_tx = sign_sweep_transaction(&master_seed, from_index, prepared_transaction).await?;
+    
     let res = broadcast_tx(signed_tx).await;
     tracing::debug!("Res: {res:?}");
     Ok(())
