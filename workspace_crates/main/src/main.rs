@@ -298,6 +298,7 @@ impl Router {
                 println!("Invoice: {invoice_req:#?}");
                 let i64_amount: i64 = ok_or_400!(invoice_req.amount_atomic.try_into());
                 let invoice_id = ok_or_400!(sqlx::query!("INSERT INTO invoices (status_update_callback_url, success_callback_url, method, receiving_payment_address, amount) VALUES($1, $2, $3, $4, $5::bigint) RETURNING id", invoice_req.status_update_callback_url,  invoice_req.success_callback_url,  invoice_req.method.to_string(), "to_do", i64_amount).fetch_one(&mut *tx).await, "sqlx error").id;
+                
                 for (k, v) in invoice_req.callback_headers.0.iter() {
                     ok_or_400!(sqlx::query!("INSERT INTO callback_headers (payment_id, key, value) VALUES ($1, $2, $3)", invoice_id.clone(), k, v, ).execute(&mut *tx).await);
                 }
