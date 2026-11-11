@@ -113,8 +113,8 @@ async fn process_invoice_that_was_just_paid(
     tx.commit().await?;
     // Now maybe sweep, but I do not need to do it in the same transaction...
     let mut sweep_tx = db_pool.begin().await?;
-    let _ = sweep(invoice, &mut sweep_tx, payment_system_config.clone()).await?;
-    let _ = sweep_tx.commit().await?;
+    sweep(invoice, &mut sweep_tx, payment_system_config.clone()).await?;
+    sweep_tx.commit().await?;
 
     Ok(())
 }
