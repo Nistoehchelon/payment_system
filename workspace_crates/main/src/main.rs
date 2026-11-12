@@ -82,17 +82,7 @@ pub struct Router {
 }
 
 impl Router {
-    // pub async fn handle( &self,
-    //     request_data: HttpRequestData,
-    //     _server_config: ServerConfig,) -> HttpResponseData {
-    //         match self.handle_inner(request_data, server_config) {
-    //             Ok(_) => {},
-    //             Err(e) => {
-    //                 // return 400
-    //             }
-    //         }
-    // }
-    pub async fn handle_inner(
+    pub async fn handle(
         &self,
         request_data: HttpRequestData,
         _server_config: ServerConfig,
@@ -195,7 +185,7 @@ impl Router {
     pub fn into_handler_fn(self) -> HandlerFn {
         HandlerFn::new(move |request_data, server_config| {
             let this = self.clone();
-            async move { this.handle_inner(request_data, server_config).await }
+            async move { this.handle(request_data, server_config).await }
         })
     }
 }
