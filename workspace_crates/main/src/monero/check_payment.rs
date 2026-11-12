@@ -77,7 +77,7 @@ pub async fn check_payment(
                 unlocked_transaction_ids.push(tx_hash);
             }
         }
-        let transaction_height = transfer["block_height"].as_u64().unwrap_or(999999999);
+        let transaction_height = transfer["block_height"].as_u64().unwrap_or(999999999999);
         tracing::debug!("transfer height: {transaction_height}");
         let transaction_confirmation_at_block = transaction_height + monero_confirmations;
         if transaction_confirmation_at_block > current_blockchain_height {
