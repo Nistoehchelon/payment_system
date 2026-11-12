@@ -1,3 +1,10 @@
+use payment_system_structs::{
+    Amount, NewInvoiceRequest, PaymentId, PaymentInfo, PaymentSystemConfig,
+};
+use server::http_stuff::http_response::{Charset, HttpResponseData, bad_request_400, ok};
+use sqlx::{PgPool, Pool, Postgres, Transaction};
+use strum::EnumString;
+
 use main::dynamic_invoice_address_generation::{GeneratedAddress, dynamic_address_generation};
 use main::poll_payments::poll_payments;
 use main::{ok_or_400, some_or_400};
@@ -8,6 +15,7 @@ use server::{HandlerFn, ServerBuilder};
 use sqlx::postgres::types::PgInterval;
 use std::{path::PathBuf, str::FromStr};
 use tokio_util::sync::CancellationToken;
+
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> anyhow::Result<()> {
     let cancellation_token = CancellationToken::new();
@@ -61,6 +69,12 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[derive(EnumString, Debug)]
+#[strum(serialize_all = "snake_case")]
+pub enum APIMethod {
+    NewInvoice,
+}
+
 #[derive(Clone)]
 pub struct Router {
     db_pool: Pool<Postgres>,
@@ -68,7 +82,17 @@ pub struct Router {
 }
 
 impl Router {
-    pub async fn handle(
+    // pub async fn handle( &self,
+    //     request_data: HttpRequestData,
+    //     _server_config: ServerConfig,) -> HttpResponseData {
+    //         match self.handle_inner(request_data, server_config) {
+    //             Ok(_) => {},
+    //             Err(e) => {
+    //                 // return 400
+    //             }
+    //         }
+    // }
+    pub async fn handle_inner(
         &self,
         request_data: HttpRequestData,
         _server_config: ServerConfig,
@@ -171,7 +195,7 @@ impl Router {
     pub fn into_handler_fn(self) -> HandlerFn {
         HandlerFn::new(move |request_data, server_config| {
             let this = self.clone();
-            async move { this.handle(request_data, server_config).await }
+            async move { this.handle_inner(request_data, server_config).await }
         })
     }
 }
@@ -244,21 +268,10 @@ async fn validate_token(db_pool: PgPool, token_str: String) -> Result<(), TokenV
     Ok(())
 }
 
-use payment_system_structs::{
-    Amount, NewInvoiceRequest, PaymentId, PaymentInfo, PaymentSystemConfig,
-};
-use server::http_stuff::http_response::{Charset, HttpResponseData, bad_request_400, ok};
-use sqlx::{PgPool, Pool, Postgres, Transaction};
-use strum::EnumString;
-
-#[derive(EnumString, Debug)]
-#[strum(serialize_all = "snake_case")]
-pub enum APIMethod {
-    NewInvoice,
-}
-
+#[tracing::instrument]
 fn parse_path(path: &str) -> Option<(&str, &str)> {
     // strips leading '/' then splits on the next '/'
+    tracing::debug!("Parsing path {path}");
     let path = path.strip_prefix('/')?;
     let (prefix, method) = path.split_once('/')?;
     Some((prefix, method))
