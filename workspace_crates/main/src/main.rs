@@ -52,7 +52,7 @@ async fn main() -> anyhow::Result<()> {
         payment_system_config.rust_log_directory_path,
     );
 
-    let _ = ServerBuilder::new(server_config, app_executable_version::get(), handler)
+    let _result = ServerBuilder::new(server_config, app_executable_version::get(), handler)
         .add_background_tasks(vec![poll_payments_task], cancellation_token)
         .run_handler_and_background_tasks()
         .await;
