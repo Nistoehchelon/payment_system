@@ -91,10 +91,11 @@ impl Router {
         let db_pool = self.db_pool.clone();
         let payment_system_config = self.payment_system_config.clone();
 
-        let data = match initial_api_access_check(&request_data, &db_pool, &payment_system_config).await {
-            Ok(value) => value,
-            Err(value) => return *value,
-        };
+        let data =
+            match initial_api_access_check(&request_data, &db_pool, &payment_system_config).await {
+                Ok(value) => value,
+                Err(value) => return *value,
+            };
         process_method(data).await
     }
 
@@ -116,7 +117,7 @@ pub async fn initial_api_access_check(
     request_data: &HttpRequestData,
     db_pool: &Pool<Postgres>,
     payment_system_config: &PaymentSystemConfig,
-) -> Result<ProceedWithAPIRequest, Box<HttpResponseData>> {
+) -> anyhow::Result<ProceedWithAPIRequest, Box<HttpResponseData>> {
     let Some((prefix, method_str)) = parse_path(&request_data.path) else {
         tracing::error!("Error parsing {}", request_data.path);
         return Err(Box::new(
@@ -135,13 +136,10 @@ pub async fn initial_api_access_check(
     };
     let token = token.to_string();
     tracing::debug!("User used token {token}");
-    match validate_token(db_pool.clone(), token.clone()).await {
-        Ok(_) => {}
-        Err(e) => {
-            tracing::error!("TokenValidationError: {e}");
-            return Err(Box::new(bad_request_400()));
-        }
-    };
+    if let Err(e) = validate_token(db_pool.clone(), token.clone()).await {
+        tracing::error!("TokenValidationError: {e}");
+        return Err(Box::new(bad_request_400()));
+    }
     let Ok(method) = APIMethod::from_str(method_str) else {
         tracing::error!("Could not parse method {method_str}");
         return Err(Box::new(bad_request_400()));
