@@ -19,7 +19,7 @@ macro_rules! ok_or_err_400 {
             Ok(v) => v,
             Err(e) => {
                 $(
-                    println!("Err: {}, Msg: {}", e, $msg);
+                    tracing::error!("Err: {}, Msg: {}", e, $msg);
                 )?
                 return Err(server::http_stuff::http_response::bad_request_400());
             }
@@ -33,7 +33,7 @@ macro_rules! some_or_400 {
             Some(v) => v,
             None => {
                 $(
-                    println!("{}", $msg);
+                    tracing::error!("{}", $msg);
                 )?
                 return server::http_stuff::http_response::bad_request_400();
             }
@@ -47,7 +47,7 @@ macro_rules! some_or_err_400 {
             Some(v) => v,
             None => {
                 $(
-                    println!("{}", $msg);
+                    tracing::error!("{}", $msg);
                 )?
                 return Err(server::http_stuff::http_response::bad_request_400());
             }

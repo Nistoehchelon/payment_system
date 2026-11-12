@@ -95,7 +95,7 @@ impl Router {
             format!("Could not parse {}", &request_data.path)
         );
         if prefix != payment_system_config.secret_prefix {
-            println!("prefix {prefix} != {}", payment_system_config.secret_prefix);
+            tracing::error!("prefix {prefix} != {}", payment_system_config.secret_prefix);
             return server::http_stuff::http_response::bad_request_400();
         }
         let token = some_or_400!(
@@ -128,7 +128,7 @@ impl Router {
                     )
                 );
 
-                println!("Invoice: {invoice_req:#?}");
+                tracing::debug!("Invoice: {invoice_req:#?}");
                 let i64_amount: i64 = ok_or_400!(invoice_req.amount_atomic.try_into());
                 let invoice_id = ok_or_400!(sqlx::query!("INSERT INTO invoices (status_update_callback_url, success_callback_url, method, receiving_payment_address, amount) VALUES($1, $2, $3, $4, $5::bigint) RETURNING id", invoice_req.status_update_callback_url,  invoice_req.success_callback_url,  invoice_req.method.to_string(), "to_do", i64_amount).fetch_one(&mut *tx).await, "sqlx error").id;
 
@@ -175,7 +175,7 @@ impl Router {
                     address,
                     method: invoice_req.method,
                 };
-                println!("{payment_info:#?}");
+                tracing::debug!("{payment_info:#?}");
                 let content = ok_or_400!(serde_json::to_vec(&payment_info));
                 ok(content, ContentType::ApplicationJson, Some(Charset::Utf8))
             }
@@ -208,16 +208,16 @@ async fn deny_if_too_many_active_invoices(
     .fetch_one(&mut **tx)
     .await
     .map_err(|e| {
-        println!("{}", e);
+        tracing::error!("{}", e);
         internal_server_error_500()
     })? {
         Some(c) => c,
         None => {
-            println!("Could get count");
+            tracing::error!("Could get count");
             return Err(Box::new(internal_server_error_500()));
         }
     };
-    println!("Counted {count} invoices");
+    tracing::debug!("Counted {count} invoices");
     let count = match u64::try_from(count) {
         Ok(c) => c,
         Err(err) => {

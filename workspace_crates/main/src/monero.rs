@@ -29,9 +29,10 @@ pub async fn sweep_all(
         .json()
         .await?;
 
-    println!("Called sweep_all()... response is: {res:#?}");
+    tracing::debug!("Called sweep_all()... response is: {res:#?}");
     anyhow::Ok(())
 }
+
 
 pub async fn check_payment(
     db_pool: sqlx::PgPool,
@@ -47,7 +48,7 @@ pub async fn check_payment(
     .await?
     .monero_payment_id;
     let expected_amount: u64 = invoice.amount.0;
-    println!(
+    tracing::debug!(
         "[Payment ID {}] Checking if the expect amount of {expected_amount} piconero was paid to {}",
         invoice.id.0, invoice.receiving_payment_address.0
     );
@@ -81,7 +82,7 @@ pub async fn check_payment(
         .await?;
     const MONERO_FULL_CONFIRMATIONS: u64 = 10;
     let current_blockchain_height = res_height["result"]["height"].as_u64().unwrap_or(0);
-    println!("Curr height: {current_blockchain_height}");
+    tracing::debug!("Curr height: {current_blockchain_height}");
     let mut unlocked_transaction_ids = Vec::new();
     for transfer in transfers.clone() {
         let locked = transfer["locked"].as_bool().unwrap_or(true);
@@ -95,17 +96,17 @@ pub async fn check_payment(
             }
         }
         let transaction_height = transfer["block_height"].as_u64().unwrap_or(999999999);
-        println!("transfer height: {transaction_height}");
+        tracing::debug!("transfer height: {transaction_height}");
         let transaction_confirmation_at_block = transaction_height + MONERO_FULL_CONFIRMATIONS;
         if transaction_confirmation_at_block > current_blockchain_height {
             let blocks_to_unlock = transaction_confirmation_at_block - current_blockchain_height;
-            println!("A transfer received, blocks to unlock : {blocks_to_unlock}",);
+            tracing::debug!("A transfer received, blocks to unlock : {blocks_to_unlock}",);
         } else {
-            println!("An unlocked tx");
+            tracing::debug!("An unlocked tx");
         }
     }
     if !transfers.is_empty() {
-        println!("Received some transfers!! {transfers:#?}");
+        tracing::debug!("Received some transfers!! {transfers:#?}");
     }
 
     let confirmed_received: u64 = transfers
@@ -117,13 +118,13 @@ pub async fn check_payment(
         .iter()
         .map(|t| t["amount"].as_u64().unwrap_or(0))
         .sum();
-    println!("Confirmed: {confirmed_received}");
-    println!("Confirmed + unconfirmed: {total_received}");
+    tracing::debug!("Confirmed: {confirmed_received}");
+    tracing::debug!("Confirmed + unconfirmed: {total_received}");
     let complete = confirmed_received >= expected_amount;
 
     match complete {
-        false => println!("not enough confirmed"),
-        true => println!("yay, enough confirmed"),
+        false => tracing::debug!("not enough confirmed"),
+        true => tracing::debug!("yay, enough confirmed"),
     }
     Ok(confirmed_received >= expected_amount)
 }

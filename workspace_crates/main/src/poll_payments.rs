@@ -33,7 +33,7 @@ pub async fn poll_payments(
         )
         .await
         .unwrap_or_default();
-        println!("Polling for {} payments", invoices.len());
+        tracing::debug!("Polling for {} payments", invoices.len());
         for invoice in invoices {
             let paid = match invoice.method {
                 Monero => {
