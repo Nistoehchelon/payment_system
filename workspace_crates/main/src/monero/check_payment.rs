@@ -1,3 +1,20 @@
+pub async fn check_small_payment(
+    db_pool: sqlx::PgPool,
+    invoice: &crate::poll_payments::Invoice,
+    client: &reqwest::Client,
+    monero_wallet_rpc_url: &String,
+) -> anyhow::Result<bool> {
+    let monero_confirmations = 1;
+    check_payment(
+        db_pool,
+        invoice,
+        client,
+        monero_wallet_rpc_url,
+        monero_confirmations,
+    )
+    .await
+}
+
 pub async fn check_payment(
     db_pool: sqlx::PgPool,
     invoice: &crate::poll_payments::Invoice,
