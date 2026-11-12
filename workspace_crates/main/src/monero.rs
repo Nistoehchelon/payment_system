@@ -1,4 +1,4 @@
-use payment_system_structs::PaymentSystemConfig;
+use payment_system_structs::{PaymentId, PaymentSystemConfig, ReceivingPaymentAddress};
 use reqwest::Client;
 
 use crate::poll_payments::Invoice;
@@ -126,4 +126,37 @@ pub async fn check_payment(
         true => println!("yay, enough confirmed"),
     }
     Ok(confirmed_received >= expected_amount)
+}
+
+
+pub async fn get_monero_address_and_payment_id(
+    rpc_url: &str,
+) -> Result<(ReceivingPaymentAddress, PaymentId), String> {
+    let client = reqwest::Client::new();
+
+    let body = serde_json::json!({"jsonrpc": "2.0",
+      "id": "0",
+      "method": "make_integrated_address"
+    });
+
+    let resp = client
+        .post(rpc_url)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("Monero RPC request failed: {e}"))?
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|e| format!("Monero RPC parse failed: {e}"))?;
+
+    let address = resp["result"]["integrated_address"]
+        .as_str()
+        .ok_or_else(|| format!("Unexpected RPC response: {resp}"))?
+        .to_string();
+    let payment_id = resp["result"]["payment_id"]
+        .as_str()
+        .ok_or_else(|| format!("Unexpected RPC response: {resp}"))?
+        .to_string();
+
+    Ok((ReceivingPaymentAddress(address), PaymentId(payment_id)))
 }

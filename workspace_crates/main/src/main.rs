@@ -1,3 +1,4 @@
+use main::dynamic_invoice_address_generation::{GeneratedAddress, dynamic_address_generation};
 use main::poll_payments::poll_payments;
 use main::{ok_or_400, some_or_400};
 use server::http_stuff::http_request_parsing::HttpRequestData;
@@ -58,6 +59,121 @@ async fn main() -> anyhow::Result<()> {
         .await;
 
     Ok(())
+}
+
+#[derive(Clone)]
+pub struct Router {
+    db_pool: Pool<Postgres>,
+    payment_system_config: PaymentSystemConfig,
+}
+
+impl Router {
+    pub async fn handle(
+        &self,
+        request_data: HttpRequestData,
+        _server_config: ServerConfig,
+    ) -> HttpResponseData {
+        let db_pool = self.db_pool.clone();
+        let payment_system_config = self.payment_system_config.clone();
+
+        let (prefix, method_str) = some_or_400!(
+            parse_path(&request_data.path),
+            format!("Could not parse {}", &request_data.path)
+        );
+        if prefix != payment_system_config.secret_prefix {
+            println!("prefix {prefix} != {}", payment_system_config.secret_prefix);
+            return server::http_stuff::http_response::bad_request_400();
+        }
+        let token = some_or_400!(
+            request_data.headers.get("x-api-token"),
+            "x-api-token header not found in request"
+        )
+        .to_string();
+        tracing::debug!("User used token {token}"); // Leaks token into consoles, in production I wanna remove this? Or just not show debug logs? Use debug assertions?
+        ok_or_400!(
+            validate_token(db_pool.clone(), token.clone()).await,
+            format!("Could not validate token {token}")
+        );
+        let method = ok_or_400!(
+            APIMethod::from_str(method_str),
+            format!("Could not parse method {method_str}")
+        );
+        tracing::debug!("Method: {method:#?}");
+        match method {
+            APIMethod::NewInvoice => {
+                let mut tx = ok_or_400!(db_pool.begin().await, String::new());
+                ok_or_400!(
+                    deny_if_too_many_active_invoices(&mut tx, payment_system_config.clone()).await,
+                    "Too many invoices active".to_string()
+                );
+                let invoice_req = ok_or_400!(
+                    serde_json::from_slice::<NewInvoiceRequest>(&request_data.body_bytes,),
+                    format!(
+                        "Could not parse json from {}",
+                        String::from_utf8_lossy(&request_data.body_bytes)
+                    )
+                );
+
+                println!("Invoice: {invoice_req:#?}");
+                let i64_amount: i64 = ok_or_400!(invoice_req.amount_atomic.try_into());
+                let invoice_id = ok_or_400!(sqlx::query!("INSERT INTO invoices (status_update_callback_url, success_callback_url, method, receiving_payment_address, amount) VALUES($1, $2, $3, $4, $5::bigint) RETURNING id", invoice_req.status_update_callback_url,  invoice_req.success_callback_url,  invoice_req.method.to_string(), "to_do", i64_amount).fetch_one(&mut *tx).await, "sqlx error").id;
+
+                for (k, v) in invoice_req.callback_headers.0.iter() {
+                    ok_or_400!(sqlx::query!("INSERT INTO callback_headers (payment_id, key, value) VALUES ($1, $2, $3)", invoice_id.clone(), k, v, ).execute(&mut *tx).await);
+                }
+                let gened_address = ok_or_400!(
+                    dynamic_address_generation(
+                        invoice_id.clone(),
+                        &mut tx,
+                        &payment_system_config.clone(),
+                        &invoice_req.method.clone()
+                    )
+                    .await,
+                    format!("Could not generate address for {}", invoice_req.method)
+                );
+                let address = match gened_address {
+                    GeneratedAddress::Litecoin { index, address } => {
+                        ok_or_400!(sqlx::query!("INSERT INTO litecoin_address_indexes (invoice_id, index) VALUES ($1, $2)", invoice_id, index.0 as i64).execute(&mut *tx).await.map_err(|e| e.to_string()));
+                        address
+                    }
+                    GeneratedAddress::Monero {
+                        monero_payment_id,
+                        address,
+                    } => {
+                        ok_or_400!(sqlx::query!("INSERT INTO monero_integrated_payment_ids (invoice_id, monero_payment_id) VALUES ($1, $2)", invoice_id, monero_payment_id.to_string()).execute(&mut *tx).await.map_err(|e| e.to_string()));
+                        address
+                    }
+                };
+                ok_or_400!(
+                    sqlx::query!(
+                        "UPDATE invoices SET receiving_payment_address = $1 WHERE id = $2",
+                        address.0,
+                        invoice_id
+                    )
+                    .execute(&mut *tx)
+                    .await
+                );
+
+                ok_or_400!(tx.commit().await);
+                let payment_info = PaymentInfo {
+                    payment_id: PaymentId(invoice_id),
+                    amount: Amount(invoice_req.amount_atomic),
+                    address,
+                    method: invoice_req.method,
+                };
+                println!("{payment_info:#?}");
+                let content = ok_or_400!(serde_json::to_vec(&payment_info));
+                ok(content, ContentType::ApplicationJson, Some(Charset::Utf8))
+            }
+        }
+    }
+
+    pub fn into_handler_fn(self) -> HandlerFn {
+        HandlerFn::new(move |request_data, server_config| {
+            let this = self.clone();
+            async move { this.handle(request_data, server_config).await }
+        })
+    }
 }
 
 async fn deny_if_too_many_active_invoices(
@@ -128,13 +244,11 @@ async fn validate_token(db_pool: PgPool, token_str: String) -> Result<(), TokenV
     Ok(())
 }
 
-use cryptocurrencies_stuff::derive_ltc::derive_ltc_bip84_address;
 use payment_system_structs::{
-    AddressIndex, Amount, NewInvoiceRequest, PaymentId, PaymentInfo, PaymentMethod,
-    PaymentSystemConfig, ReceivingPaymentAddress,
+    Amount, NewInvoiceRequest, PaymentId, PaymentInfo, PaymentSystemConfig,
 };
 use server::http_stuff::http_response::{Charset, HttpResponseData, bad_request_400, ok};
-use sqlx::{PgConnection, PgPool, Pool, Postgres, Transaction};
+use sqlx::{PgPool, Pool, Postgres, Transaction};
 use strum::EnumString;
 
 #[derive(EnumString, Debug)]
@@ -143,216 +257,9 @@ pub enum APIMethod {
     NewInvoice,
 }
 
-pub enum GeneratedAddress {
-    Litecoin {
-        index: AddressIndex,
-        address: ReceivingPaymentAddress,
-    },
-    Monero {
-        monero_payment_id: PaymentId,
-        address: ReceivingPaymentAddress,
-    },
-}
-
-async fn dynamic_address_generation(
-    _payment_id: String,
-    conn: &mut PgConnection,
-    psc: &PaymentSystemConfig,
-    m: &PaymentMethod,
-) -> anyhow::Result<GeneratedAddress, String> {
-    match m {
-        PaymentMethod::Litecoin => {
-            let index = match sqlx::query_scalar!(
-                "SELECT COUNT(*) FROM invoices WHERE method = $1",
-                m.to_string()
-            )
-            .fetch_one(&mut *conn)
-            .await
-            {
-                Ok(Some(i)) => i,
-                Err(e) => {
-                    tracing::debug!("{e}");
-                    return Err(format!("{e}"));
-                }
-                Ok(None) => {
-                    tracing::debug!("dynamic_address_generation LTC 0 invoices");
-                    return Err("dynamic_address_generation LTC 0 invoices".to_string());
-                }
-            };
-
-            let index = index as u64;
-            let address = derive_ltc_bip84_address(&psc.litecoin_master_seed, index)?;
-            Ok(GeneratedAddress::Litecoin {
-                index: AddressIndex(index),
-                address: ReceivingPaymentAddress(address),
-            })
-        }
-        PaymentMethod::Monero => {
-            let (address, monero_payment_id) =
-                match get_monero_address_and_payment_id(&psc.monero_wallet_rpc_url).await {
-                    Ok(a) => a,
-                    Err(e) => {
-                        return Err(format!("Err '{e}' from monero subaddr gen"));
-                    }
-                };
-            Ok(GeneratedAddress::Monero {
-                monero_payment_id,
-                address,
-            })
-        }
-    }
-}
-
 fn parse_path(path: &str) -> Option<(&str, &str)> {
     // strips leading '/' then splits on the next '/'
     let path = path.strip_prefix('/')?;
     let (prefix, method) = path.split_once('/')?;
     Some((prefix, method))
-}
-
-pub async fn get_monero_address_and_payment_id(
-    rpc_url: &str,
-) -> Result<(ReceivingPaymentAddress, PaymentId), String> {
-    let client = reqwest::Client::new();
-
-    let body = serde_json::json!({"jsonrpc": "2.0",
-      "id": "0",
-      "method": "make_integrated_address"
-    });
-
-    let resp = client
-        .post(rpc_url)
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| format!("Monero RPC request failed: {e}"))?
-        .json::<serde_json::Value>()
-        .await
-        .map_err(|e| format!("Monero RPC parse failed: {e}"))?;
-
-    let address = resp["result"]["integrated_address"]
-        .as_str()
-        .ok_or_else(|| format!("Unexpected RPC response: {resp}"))?
-        .to_string();
-    let payment_id = resp["result"]["payment_id"]
-        .as_str()
-        .ok_or_else(|| format!("Unexpected RPC response: {resp}"))?
-        .to_string();
-
-    Ok((ReceivingPaymentAddress(address), PaymentId(payment_id)))
-}
-
-#[derive(Clone)]
-pub struct Router {
-    db_pool: Pool<Postgres>,
-    payment_system_config: PaymentSystemConfig,
-}
-
-impl Router {
-    pub async fn handle(
-        &self,
-        request_data: HttpRequestData,
-        _server_config: ServerConfig,
-    ) -> HttpResponseData {
-        let db_pool = self.db_pool.clone();
-        let payment_system_config = self.payment_system_config.clone();
-
-        let (prefix, method_str) = some_or_400!(
-            parse_path(&request_data.path),
-            format!("Could not parse {}", &request_data.path)
-        );
-        if prefix != payment_system_config.secret_prefix {
-            println!("prefix {prefix} != {}", payment_system_config.secret_prefix);
-            return server::http_stuff::http_response::bad_request_400();
-        }
-        let token = some_or_400!(
-            request_data.headers.get("x-api-token"),
-            "x-api-token header not found in request"
-        )
-        .to_string();
-        tracing::debug!("User used token {token}"); // Leaks token into consoles, in production I wanna remove this? Or just not show debug logs? Use debug assertions?
-        ok_or_400!(
-            validate_token(db_pool.clone(), token.clone()).await,
-            format!("Could not validate token {token}")
-        );
-        let method = ok_or_400!(
-            APIMethod::from_str(method_str),
-            format!("Could not parse method {method_str}")
-        );
-        tracing::debug!("Method: {method:#?}");
-        match method {
-            APIMethod::NewInvoice => {
-                let mut tx = ok_or_400!(db_pool.begin().await, String::new());
-                ok_or_400!(
-                    deny_if_too_many_active_invoices(&mut tx, payment_system_config.clone()).await,
-                    "Too many invoices active".to_string()
-                );
-                let invoice_req = ok_or_400!(
-                    serde_json::from_slice::<NewInvoiceRequest>(&request_data.body_bytes,),
-                    format!(
-                        "Could not parse json from {}",
-                        String::from_utf8_lossy(&request_data.body_bytes)
-                    )
-                );
-
-                println!("Invoice: {invoice_req:#?}");
-                let i64_amount: i64 = ok_or_400!(invoice_req.amount_atomic.try_into());
-                let invoice_id = ok_or_400!(sqlx::query!("INSERT INTO invoices (status_update_callback_url, success_callback_url, method, receiving_payment_address, amount) VALUES($1, $2, $3, $4, $5::bigint) RETURNING id", invoice_req.status_update_callback_url,  invoice_req.success_callback_url,  invoice_req.method.to_string(), "to_do", i64_amount).fetch_one(&mut *tx).await, "sqlx error").id;
-                
-                for (k, v) in invoice_req.callback_headers.0.iter() {
-                    ok_or_400!(sqlx::query!("INSERT INTO callback_headers (payment_id, key, value) VALUES ($1, $2, $3)", invoice_id.clone(), k, v, ).execute(&mut *tx).await);
-                }
-                let gened_address = ok_or_400!(
-                    dynamic_address_generation(
-                        invoice_id.clone(),
-                        &mut tx,
-                        &payment_system_config.clone(),
-                        &invoice_req.method.clone()
-                    )
-                    .await,
-                    format!("Could not generate address for {}", invoice_req.method)
-                );
-                let address = match gened_address {
-                    GeneratedAddress::Litecoin { index, address } => {
-                        ok_or_400!(sqlx::query!("INSERT INTO litecoin_address_indexes (invoice_id, index) VALUES ($1, $2)", invoice_id, index.0 as i64).execute(&mut *tx).await.map_err(|e| e.to_string()));
-                        address
-                    }
-                    GeneratedAddress::Monero {
-                        monero_payment_id,
-                        address,
-                    } => {
-                        ok_or_400!(sqlx::query!("INSERT INTO monero_integrated_payment_ids (invoice_id, monero_payment_id) VALUES ($1, $2)", invoice_id, monero_payment_id.to_string()).execute(&mut *tx).await.map_err(|e| e.to_string()));
-                        address
-                    }
-                };
-                ok_or_400!(
-                    sqlx::query!(
-                        "UPDATE invoices SET receiving_payment_address = $1 WHERE id = $2",
-                        address.0,
-                        invoice_id
-                    )
-                    .execute(&mut *tx)
-                    .await
-                );
-
-                ok_or_400!(tx.commit().await);
-                let payment_info = PaymentInfo {
-                    payment_id: PaymentId(invoice_id),
-                    amount: Amount(invoice_req.amount_atomic),
-                    address,
-                    method: invoice_req.method,
-                };
-                println!("{payment_info:#?}");
-                let content = ok_or_400!(serde_json::to_vec(&payment_info));
-                ok(content, ContentType::ApplicationJson, Some(Charset::Utf8))
-            }
-        }
-    }
-
-    pub fn into_handler_fn(self) -> HandlerFn {
-        HandlerFn::new(move |request_data, server_config| {
-            let this = self.clone();
-            async move { this.handle(request_data, server_config).await }
-        })
-    }
 }
