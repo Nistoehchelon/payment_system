@@ -14,7 +14,6 @@ use crate::{
     monero::{self},
 };
 
-
 #[tracing::instrument]
 pub async fn poll_payments(
     db_pool: sqlx::PgPool,

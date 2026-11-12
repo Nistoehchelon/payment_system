@@ -1,10 +1,10 @@
 use payment_system_structs::{CallbackHeaders, PaymentId};
 use sqlx::PgConnection;
+pub mod dynamic_invoice_address_generation;
 pub mod litecoin;
 pub mod macros_400;
 pub mod monero;
 pub mod poll_payments;
-pub mod dynamic_invoice_address_generation;
 
 async fn fetch_zero_or_more_callback_headers(
     conn: &mut PgConnection,

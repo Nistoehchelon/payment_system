@@ -33,7 +33,6 @@ pub async fn sweep_all(
     anyhow::Ok(())
 }
 
-
 pub async fn check_payment(
     db_pool: sqlx::PgPool,
     invoice: &Invoice,
@@ -50,7 +49,8 @@ pub async fn check_payment(
     let expected_amount: u64 = invoice.amount.0;
     tracing::debug!(
         "[Payment ID {}] Checking if the expect amount of {expected_amount} piconero was paid to {}",
-        invoice.id.0, invoice.receiving_payment_address.0
+        invoice.id.0,
+        invoice.receiving_payment_address.0
     );
     let body = serde_json::json!({
       "jsonrpc": "2.0",
@@ -128,7 +128,6 @@ pub async fn check_payment(
     }
     Ok(confirmed_received >= expected_amount)
 }
-
 
 pub async fn get_monero_address_and_payment_id(
     rpc_url: &str,

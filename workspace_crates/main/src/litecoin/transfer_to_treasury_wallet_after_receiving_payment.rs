@@ -114,7 +114,7 @@ pub async fn sweep_balance(
     .await?;
 
     let signed_tx = sign_sweep_transaction(&master_seed, from_index, prepared_transaction).await?;
-    
+
     let res = broadcast_tx(signed_tx).await;
     tracing::debug!("Res: {res:?}");
     Ok(())
