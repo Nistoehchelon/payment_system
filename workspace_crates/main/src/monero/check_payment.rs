@@ -1,43 +1,9 @@
-use payment_system_structs::{PaymentId, PaymentSystemConfig, ReceivingPaymentAddress};
-use reqwest::Client;
-
-use crate::poll_payments::Invoice;
-
-pub async fn sweep_all(
-    rpc_client: &Client,
-    payment_system_config: &PaymentSystemConfig,
-) -> anyhow::Result<()> {
-    let body = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": "0",
-        "method": "sweep_all",
-        "params": {
-            "address": &payment_system_config.monero_treasury_address,
-            "account_index": 0,
-            "subaddr_indices": [0],  // address index 0
-            "priority": 0,
-            "ring_size": 16,
-            "get_tx_keys": false,
-            "do_not_relay": false
-        }
-    });
-    let res: serde_json::Value = rpc_client
-        .post(&payment_system_config.monero_wallet_rpc_url)
-        .json(&body)
-        .send()
-        .await?
-        .json()
-        .await?;
-
-    tracing::debug!("Called sweep_all()... response is: {res:#?}");
-    anyhow::Ok(())
-}
-
 pub async fn check_payment(
     db_pool: sqlx::PgPool,
-    invoice: &Invoice,
+    invoice: &crate::poll_payments::Invoice,
     client: &reqwest::Client,
-    payment_system_config: &PaymentSystemConfig,
+    monero_wallet_rpc_url: &String,
+    monero_confirmations: u64,
 ) -> anyhow::Result<bool> {
     let monero_payment_id = sqlx::query!(
         "SELECT monero_payment_id FROM monero_integrated_payment_ids WHERE invoice_id = $1",
@@ -61,7 +27,7 @@ pub async fn check_payment(
       }
     });
     let res: serde_json::Value = client
-        .post(&payment_system_config.monero_wallet_rpc_url)
+        .post(monero_wallet_rpc_url)
         .json(&body)
         .send()
         .await?
@@ -74,13 +40,12 @@ pub async fn check_payment(
         .unwrap_or_default();
     let current_height_body = serde_json::json!({"jsonrpc":"2.0","id":"0","method":"get_height"});
     let res_height: serde_json::Value = client
-        .post(&payment_system_config.monero_wallet_rpc_url)
+        .post(monero_wallet_rpc_url)
         .json(&current_height_body)
         .send()
         .await?
         .json()
         .await?;
-    const MONERO_FULL_CONFIRMATIONS: u64 = 10;
     let current_blockchain_height = res_height["result"]["height"].as_u64().unwrap_or(0);
     tracing::debug!("Curr height: {current_blockchain_height}");
     let mut unlocked_transaction_ids = Vec::new();
@@ -97,7 +62,7 @@ pub async fn check_payment(
         }
         let transaction_height = transfer["block_height"].as_u64().unwrap_or(999999999);
         tracing::debug!("transfer height: {transaction_height}");
-        let transaction_confirmation_at_block = transaction_height + MONERO_FULL_CONFIRMATIONS;
+        let transaction_confirmation_at_block = transaction_height + monero_confirmations;
         if transaction_confirmation_at_block > current_blockchain_height {
             let blocks_to_unlock = transaction_confirmation_at_block - current_blockchain_height;
             tracing::debug!("A transfer received, blocks to unlock : {blocks_to_unlock}",);
@@ -127,36 +92,4 @@ pub async fn check_payment(
         true => tracing::debug!("yay, enough confirmed"),
     }
     Ok(confirmed_received >= expected_amount)
-}
-
-pub async fn get_monero_address_and_payment_id(
-    rpc_url: &str,
-) -> Result<(ReceivingPaymentAddress, PaymentId), String> {
-    let client = reqwest::Client::new();
-
-    let body = serde_json::json!({"jsonrpc": "2.0",
-      "id": "0",
-      "method": "make_integrated_address"
-    });
-
-    let resp = client
-        .post(rpc_url)
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| format!("Monero RPC request failed: {e}"))?
-        .json::<serde_json::Value>()
-        .await
-        .map_err(|e| format!("Monero RPC parse failed: {e}"))?;
-
-    let address = resp["result"]["integrated_address"]
-        .as_str()
-        .ok_or_else(|| format!("Unexpected RPC response: {resp}"))?
-        .to_string();
-    let payment_id = resp["result"]["payment_id"]
-        .as_str()
-        .ok_or_else(|| format!("Unexpected RPC response: {resp}"))?
-        .to_string();
-
-    Ok((ReceivingPaymentAddress(address), PaymentId(payment_id)))
 }

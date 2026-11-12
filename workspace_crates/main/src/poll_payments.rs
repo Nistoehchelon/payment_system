@@ -40,7 +40,8 @@ pub async fn poll_payments(
                         db_pool.clone(),
                         &invoice,
                         &rpc,
-                        &payment_system_config,
+                        &payment_system_config.monero_wallet_rpc_url,
+                        payment_system_config.monero_confirmations,
                     )
                     .await
                     {
