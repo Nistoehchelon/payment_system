@@ -3,7 +3,6 @@ pub use check_payment::check_payment;
 use payment_system_structs::{PaymentId, PaymentSystemConfig, ReceivingPaymentAddress};
 use reqwest::Client;
 
-
 pub async fn sweep_all(
     rpc_client: &Client,
     payment_system_config: &PaymentSystemConfig,

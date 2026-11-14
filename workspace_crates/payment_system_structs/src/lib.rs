@@ -16,9 +16,9 @@ pub struct PaymentSystemConfig {
     pub monero_confirmations: u64,
     // limit monitoring load
     pub max_active_invoices: u64,
-     #[serde(with = "humantime_serde")]
+    #[serde(with = "humantime_serde")]
     pub active_invoice_minutes_since_creation: std::time::Duration,
-     #[serde(with = "humantime_serde")]
+    #[serde(with = "humantime_serde")]
     pub sufficiently_old_to_sweep_means: std::time::Duration,
 
     pub litecoin_master_seed: String,

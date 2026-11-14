@@ -4,12 +4,15 @@ use cryptocurrencies_stuff::currencies::LTCAtomicUnit;
 use payment_system_structs::{
     PaymentId,
     PaymentMethod::{Litecoin, Monero},
-    PaymentSystemConfig, 
+    PaymentSystemConfig,
 };
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    cancellable_sleep, fetch_zero_or_more_callback_headers, invoice::{Invoice, get_active_invoices}, litecoin, monero::{self},
+    cancellable_sleep, fetch_zero_or_more_callback_headers,
+    invoice::{Invoice, get_active_invoices},
+    litecoin,
+    monero::{self},
 };
 
 #[tracing::instrument]
@@ -66,32 +69,21 @@ pub async fn poll_payments_tasks(
                 }
             };
             if paid
-                && let Err(e) = process_invoice_that_was_just_paid(
-                    &rpc,
-                    &db_pool,
-                    invoice,
-                )
+                && let Err(e) = process_invoice_that_was_just_paid(&rpc, &db_pool, invoice).await
+            {
+                tracing::error!("{e}");
+            }
+            if cancellable_sleep(sleep_between_each_payment_check, &cancellation_token)
                 .await
-                {
-                    tracing::error!("{e}");
-                }
-            if cancellable_sleep(
-                sleep_between_each_payment_check,
-                &cancellation_token,
-            )
-            .await
-            .is_err()
+                .is_err()
             {
                 tracing::info!("Poll payments task cancelled during invoice delay");
                 return;
             }
         }
-        if cancellable_sleep(
-            sleep_between_each_loop,
-            &cancellation_token,
-        )
-        .await
-        .is_err()
+        if cancellable_sleep(sleep_between_each_loop, &cancellation_token)
+            .await
+            .is_err()
         {
             tracing::info!("Poll payments task cancelled during main sleep");
             return;

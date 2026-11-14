@@ -11,8 +11,6 @@ use std::str::FromStr;
 
 use crate::litecoin::{calculate_fee, estimate_vsize};
 
-
-
 pub async fn sweep_balance(
     master_seed: String,
     from_index: u64,
@@ -45,7 +43,6 @@ pub async fn sweep_balance(
     tracing::debug!("Res: {res:?}");
     Ok(())
 }
-
 
 #[derive(Debug, Clone)]
 pub struct SignedTransaction(pub bitcoin::Transaction);

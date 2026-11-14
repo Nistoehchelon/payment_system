@@ -1,4 +1,3 @@
-
 use anyhow::{Context, anyhow};
 use bitcoin::{
     ScriptBuf, Transaction, TxIn, TxOut, Witness, absolute::LockTime, transaction::Version,
