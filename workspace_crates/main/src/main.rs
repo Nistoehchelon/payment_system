@@ -6,13 +6,12 @@ use sqlx::{PgPool, Pool, Postgres, Transaction};
 use strum::EnumString;
 
 use main::dynamic_invoice_address_generation::{GeneratedAddress, dynamic_address_generation};
-use main::ok_or_400;
-use main::poll_payments::poll_payments;
+use main::poll_payments_task::poll_payments_tasks;
+use main::{get_interval, ok_or_400};
 use server::http_stuff::http_request_parsing::HttpRequestData;
-use server::http_stuff::http_response::{ContentType, internal_server_error_500};
+use server::http_stuff::http_response::ContentType;
 use server::server_config::ServerConfig;
 use server::{HandlerFn, ServerBuilder};
-use sqlx::postgres::types::PgInterval;
 use std::{path::PathBuf, str::FromStr};
 use tokio_util::sync::CancellationToken;
 
@@ -44,7 +43,7 @@ async fn main() -> anyhow::Result<()> {
     }
     .into_handler_fn();
 
-    let poll_payments_task = Box::pin(poll_payments(
+    let poll_payments_task = Box::pin(poll_payments_tasks(
         db_pool.clone(),
         payment_system_config.clone(),
         poll_payments_token,
@@ -267,40 +266,25 @@ pub async fn process_new_invoice_method(
 async fn deny_if_too_many_active_invoices(
     tx: &mut Transaction<'_, Postgres>,
     payment_system_config: PaymentSystemConfig,
-) -> Result<(), Box<HttpResponseData>> {
-    let interval = PgInterval {
-        months: 0,
-        days: 0,
-        microseconds: (payment_system_config.active_invoice_minutes_since_creation as i64)
-            * 60
-            * 1_000_000,
-    };
+) -> anyhow::Result<()> {
+    let interval = get_interval(payment_system_config.active_invoice_minutes_since_creation)?;
     let count = match sqlx::query_scalar!(
         "SELECT COUNT(*) FROM invoices WHERE created_at > NOW() - $1::interval",
         interval
     )
     .fetch_one(&mut **tx)
-    .await
-    .map_err(|e| {
-        tracing::error!("{}", e);
-        internal_server_error_500()
-    })? {
+    .await?
+    {
         Some(c) => c,
         None => {
-            tracing::error!("Could get count");
-            return Err(Box::new(internal_server_error_500()));
+            tracing::error!("Could not get count");
+            return Err(anyhow::anyhow!("Could not get count"));
         }
     };
     tracing::debug!("Counted {count} invoices");
-    let count = match u64::try_from(count) {
-        Ok(c) => c,
-        Err(err) => {
-            tracing::debug!("{err}");
-            return Err(Box::new(bad_request_400()));
-        }
-    };
-    if count > payment_system_config.max_active_invoices {
-        return Err(Box::new(bad_request_400()));
+    let count = u64::try_from(count)?;
+    if count >= payment_system_config.max_active_invoices {
+        return Err(anyhow::anyhow!("Active invoices, max capacity"));
     }
     Ok(())
 }

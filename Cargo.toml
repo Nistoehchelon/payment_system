@@ -37,3 +37,4 @@ cryptocurrencies_stuff = { git = "https://github.com/Nistoehchelonmneugaphy/cryp
 tokio-util = { version = "0.7.20"}
 test-log = "0.2.21"
 bitcoin = "0.32.102"
+humantime-serde = "1.1.1"

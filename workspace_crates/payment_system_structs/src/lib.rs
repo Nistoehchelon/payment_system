@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use chrono::Duration;
 use strum::EnumString;
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -16,7 +17,11 @@ pub struct PaymentSystemConfig {
     pub monero_confirmations: u64,
     // limit monitoring load
     pub max_active_invoices: u64,
-    pub active_invoice_minutes_since_creation: u64,
+     #[serde(with = "humantime_serde")]
+    pub active_invoice_minutes_since_creation: std::time::Duration,
+     #[serde(with = "humantime_serde")]
+    pub sufficiently_old_to_sweep_means: std::time::Duration,
+
     pub litecoin_master_seed: String,
     pub litecoin_rest_api_url: String,
     pub litecoin_treasury_address: String,
@@ -35,7 +40,7 @@ pub struct PaymentSqlxShape {
     pub amount: i64,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub completed_at: Option<chrono::DateTime<chrono::Utc>>,
-    pub sweeped_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub swept_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize, EnumString, strum::Display, Debug)]

@@ -27,7 +27,7 @@ CREATE TABLE invoices (
     receiving_payment_address             text        NOT NULL,
     created_at          timestamptz NOT NULL DEFAULT now(),
     completed_at        timestamptz,
-    sweeped_at          timestamptz
+    swept_at          timestamptz
 );
 
 CREATE TABLE tokens (

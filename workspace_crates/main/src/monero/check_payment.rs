@@ -1,6 +1,8 @@
+use crate::invoice::Invoice;
+
 pub async fn check_small_payment(
     db_pool: sqlx::PgPool,
-    invoice: &crate::poll_payments::Invoice,
+    invoice: &Invoice,
     client: &reqwest::Client,
     monero_wallet_rpc_url: &String,
 ) -> anyhow::Result<bool> {
@@ -17,7 +19,7 @@ pub async fn check_small_payment(
 
 pub async fn check_payment(
     db_pool: sqlx::PgPool,
-    invoice: &crate::poll_payments::Invoice,
+    invoice: &Invoice,
     client: &reqwest::Client,
     monero_wallet_rpc_url: &String,
     monero_confirmations: u64,
