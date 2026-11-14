@@ -49,10 +49,10 @@ async fn main() -> anyhow::Result<()> {
         poll_payments_token,
         payment_system_config
             .clone()
-            .wait_between_each_payment_check_secs,
+            .wait_between_each_payment_check,
         payment_system_config
             .clone()
-            .wait_between_each_payment_poll_iteration_secs,
+            .wait_between_each_payment_poll_iteration,
     ));
     let server_config = ServerConfig::new(
         payment_system_config.ip.clone(),

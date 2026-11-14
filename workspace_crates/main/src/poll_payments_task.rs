@@ -17,8 +17,8 @@ pub async fn poll_payments_tasks(
     db_pool: sqlx::PgPool,
     payment_system_config: PaymentSystemConfig,
     cancellation_token: CancellationToken,
-    sleep_between_each_payment_check: u64,
-    sleep_between_each_loop: u64,
+    sleep_between_each_payment_check: Duration,
+    sleep_between_each_loop: Duration,
 ) {
     let rpc = reqwest::Client::new();
 
@@ -76,7 +76,7 @@ pub async fn poll_payments_tasks(
                     tracing::error!("{e}");
                 }
             if cancellable_sleep(
-                Duration::from_secs(sleep_between_each_payment_check),
+                sleep_between_each_payment_check,
                 &cancellation_token,
             )
             .await
@@ -87,7 +87,7 @@ pub async fn poll_payments_tasks(
             }
         }
         if cancellable_sleep(
-            Duration::from_secs(sleep_between_each_loop),
+            sleep_between_each_loop,
             &cancellation_token,
         )
         .await
