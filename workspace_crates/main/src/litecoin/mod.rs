@@ -1,4 +1,4 @@
-pub mod transfer_to_treasury_wallet_after_receiving_payment;
+
 use anyhow::{Context, anyhow};
 use bitcoin::{
     ScriptBuf, Transaction, TxIn, TxOut, Witness, absolute::LockTime, transaction::Version,
@@ -10,6 +10,8 @@ pub use check_payment::check_payment;
 pub mod get_address_balance;
 pub use get_address_balance::get_address_balance_for_small_payments;
 pub mod get_utxos;
+pub mod transfer_to_treasury_wallet_after_receiving_payment;
+pub use transfer_to_treasury_wallet_after_receiving_payment::sweep_balance;
 
 use serde::Deserialize;
 

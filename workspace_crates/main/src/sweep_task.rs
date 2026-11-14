@@ -4,7 +4,7 @@ use tokio_util::sync::CancellationToken;
 use crate::{
     cancellable_sleep,
     invoice::{
-        Invoice, PaidUnsweptSufficientlyOldInvoiceForSweeping,
+        PaidUnsweptSufficientlyOldInvoiceForSweeping,
         get_paid_but_not_swept_sufficiently_old_invoices,
     },
     litecoin::transfer_to_treasury_wallet_after_receiving_payment::sweep_balance,
@@ -28,7 +28,7 @@ pub async fn sweep_task(
     // 1. Get a list of all invoices that were completed at least 30 minutes ago and are yet to be marked as sweeped.
     // 2. Based on payment method, call the corresponding sweep function
     // 3. That's it
-    let rpc = reqwest::Client::new();
+    let reqwest_client = reqwest::Client::new();
 
     loop {
         let db_pool = db_pool.clone();
@@ -43,6 +43,36 @@ pub async fn sweep_task(
             ready_unswept_invoices.len()
         );
         for invoice in ready_unswept_invoices {
+            // Now maybe sweep, but I do not need to do it in the same transaction...
+            let mut sweep_tx = match db_pool.begin().await {
+                Ok(t) => t,
+                Err(e) => {
+                    tracing::debug!("{e:#?}");
+                    continue;
+                }
+            };
+            match sweep(
+                &reqwest_client,
+                invoice,
+                &mut sweep_tx,
+                payment_system_config.clone(),
+            )
+            .await
+            {
+                Ok(_) => {
+                    tracing::debug!("A sweep successfully initiated");
+                    match sweep_tx.commit().await {
+                        Ok(t) => t,
+                        Err(e) => {
+                            tracing::debug!("{e:#?}");
+                            continue;
+                        }
+                    };
+                }
+                Err(e) => {
+                    tracing::error!("Sweep initiation failed, error: {e:#?}");
+                }
+            };
             if cancellable_sleep(
                 std::time::Duration::from_secs(sleep_between_each_payment_check),
                 &cancellation_token,
@@ -68,11 +98,11 @@ pub async fn sweep_task(
 }
 
 async fn sweep(
+    reqwest_client: &reqwest::Client,
     invoice: PaidUnsweptSufficientlyOldInvoiceForSweeping,
     conn: &mut sqlx::PgConnection,
     payment_system_config: payment_system_structs::PaymentSystemConfig,
 ) -> anyhow::Result<()> {
-    let rpc_client = reqwest::Client::new();
     let invoice = invoice.0;
     match invoice.method {
         payment_system_structs::PaymentMethod::Litecoin => {
@@ -94,7 +124,7 @@ async fn sweep(
             .await?;
         }
         payment_system_structs::PaymentMethod::Monero => {
-            sweep_all(&rpc_client, &payment_system_config).await?;
+            sweep_all(reqwest_client, &payment_system_config).await?;
         }
     }
     sqlx::query!(

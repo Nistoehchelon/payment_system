@@ -11,6 +11,42 @@ use std::str::FromStr;
 
 use crate::litecoin::{calculate_fee, estimate_vsize};
 
+
+
+pub async fn sweep_balance(
+    master_seed: String,
+    from_index: u64,
+    to_address: payment_system_structs::CryptoAddress,
+) -> anyhow::Result<()> {
+    let from_address = payment_system_structs::CryptoAddress(
+        cryptocurrencies_stuff::derive_ltc::derive_ltc_bip84_address(&master_seed, from_index)
+            .map_err(|e| anyhow!(e))?,
+    );
+    let utxos = crate::litecoin::get_utxos::get_utxos(&from_address.0)
+        .await?
+        .into_iter()
+        .filter(|u| u.status.confirmed)
+        .collect();
+    let fee_estimation_per_virtual_byte = crate::litecoin::get_a_fee_estimate_per_virtual_byte(
+        crate::litecoin::RecommendedFeeType::FastestFee,
+    )
+    .await?;
+    let prepared_transaction = prepare_sweep_tx(
+        utxos,
+        from_address,
+        to_address,
+        fee_estimation_per_virtual_byte,
+    )
+    .await?;
+
+    let signed_tx = sign_sweep_transaction(&master_seed, from_index, prepared_transaction).await?;
+
+    let res = broadcast_tx(signed_tx).await;
+    tracing::debug!("Res: {res:?}");
+    Ok(())
+}
+
+
 #[derive(Debug, Clone)]
 pub struct SignedTransaction(pub bitcoin::Transaction);
 pub async fn sign_sweep_transaction(
@@ -85,39 +121,6 @@ pub async fn broadcast_tx(tx: SignedTransaction) -> anyhow::Result<String> {
         bail!("broadcast rejected ({}): {}", status, body.trim());
     }
     Ok(body.trim().to_string())
-}
-
-pub async fn sweep_balance(
-    master_seed: String,
-    from_index: u64,
-    to_address: payment_system_structs::CryptoAddress,
-) -> anyhow::Result<()> {
-    let from_address = payment_system_structs::CryptoAddress(
-        cryptocurrencies_stuff::derive_ltc::derive_ltc_bip84_address(&master_seed, from_index)
-            .map_err(|e| anyhow!(e))?,
-    );
-    let utxos = crate::litecoin::get_utxos::get_utxos(&from_address.0)
-        .await?
-        .into_iter()
-        .filter(|u| u.status.confirmed)
-        .collect();
-    let fee_estimation_per_virtual_byte = crate::litecoin::get_a_fee_estimate_per_virtual_byte(
-        crate::litecoin::RecommendedFeeType::FastestFee,
-    )
-    .await?;
-    let prepared_transaction = prepare_sweep_tx(
-        utxos,
-        from_address,
-        to_address,
-        fee_estimation_per_virtual_byte,
-    )
-    .await?;
-
-    let signed_tx = sign_sweep_transaction(&master_seed, from_index, prepared_transaction).await?;
-
-    let res = broadcast_tx(signed_tx).await;
-    tracing::debug!("Res: {res:?}");
-    Ok(())
 }
 
 #[derive(Debug, Clone)]

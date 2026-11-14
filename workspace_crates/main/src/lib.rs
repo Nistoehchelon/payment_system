@@ -27,14 +27,15 @@ pub fn get_interval(time: std::time::Duration) -> anyhow::Result<PgInterval> {
         .map_err(|e| anyhow::anyhow!("Failed to convert Duration into PgInterval: {e:#?}"))
 }
 
+pub struct TimeToCancel;
 #[tracing::instrument]
 pub async fn cancellable_sleep(
     duration: std::time::Duration,
     cancellation_token: &tokio_util::sync::CancellationToken,
-) -> Result<(), ()> {
+) -> Result<(), TimeToCancel> {
     tracing::debug!("Sleeping for a bit in a cancellable way");
     tokio::select! {
         _ = tokio::time::sleep(duration) => Ok(()),
-        _ = cancellation_token.cancelled() => Err(()),
+        _ = cancellation_token.cancelled() => Err(TimeToCancel),
     }
 }
