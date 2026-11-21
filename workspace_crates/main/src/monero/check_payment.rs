@@ -1,0 +1,114 @@
+use crate::invoice::Invoice;
+
+pub async fn check_small_payment(
+    db_pool: sqlx::PgPool,
+    invoice: &Invoice,
+    client: &reqwest::Client,
+    monero_wallet_rpc_url: &String,
+) -> anyhow::Result<bool> {
+    let monero_confirmations = 1;
+    check_payment(
+        db_pool,
+        invoice,
+        client,
+        monero_wallet_rpc_url,
+        monero_confirmations,
+    )
+    .await
+}
+
+pub async fn check_payment(
+    db_pool: sqlx::PgPool,
+    invoice: &Invoice,
+    client: &reqwest::Client,
+    monero_wallet_rpc_url: &String,
+    monero_confirmations: u64,
+) -> anyhow::Result<bool> {
+    let monero_payment_id = sqlx::query!(
+        "SELECT monero_payment_id FROM monero_integrated_payment_ids WHERE invoice_id = $1",
+        invoice.id.0
+    )
+    .fetch_one(&db_pool)
+    .await?
+    .monero_payment_id;
+    let expected_amount: u128 = invoice.amount.0;
+    tracing::debug!(
+        "[Payment ID {}] Checking if the expect amount of {expected_amount} piconero was paid to {}",
+        invoice.id.0,
+        invoice.receiving_payment_address.0
+    );
+    let body = serde_json::json!({
+      "jsonrpc": "2.0",
+      "id": "0",
+      "method": "get_payments",
+      "params": {
+        "payment_id": monero_payment_id
+      }
+    });
+    let res: serde_json::Value = client
+        .post(monero_wallet_rpc_url)
+        .json(&body)
+        .send()
+        .await?
+        .json()
+        .await?;
+
+    let transfers = res["result"]["payments"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let current_height_body = serde_json::json!({"jsonrpc":"2.0","id":"0","method":"get_height"});
+    let res_height: serde_json::Value = client
+        .post(monero_wallet_rpc_url)
+        .json(&current_height_body)
+        .send()
+        .await?
+        .json()
+        .await?;
+    let current_blockchain_height = res_height["result"]["height"].as_u64().unwrap_or(0);
+    tracing::debug!("Curr height: {current_blockchain_height}");
+    let mut unlocked_transaction_ids = Vec::new();
+    for transfer in transfers.clone() {
+        let locked = transfer["locked"].as_bool().unwrap_or(true);
+        if !locked {
+            let tx_hash = transfer["tx_hash"]
+                .as_str()
+                .unwrap_or("erm_nothing?")
+                .to_string();
+            if tx_hash != "erm_nothing?" {
+                unlocked_transaction_ids.push(tx_hash);
+            }
+        }
+        let transaction_height = transfer["block_height"].as_u64().unwrap_or(999999999999);
+        tracing::debug!("transfer height: {transaction_height}");
+        let transaction_confirmation_at_block = transaction_height + monero_confirmations;
+        if transaction_confirmation_at_block > current_blockchain_height {
+            let blocks_to_unlock = transaction_confirmation_at_block - current_blockchain_height;
+            tracing::debug!("A transfer received, blocks to unlock : {blocks_to_unlock}",);
+        } else {
+            tracing::debug!("An unlocked tx");
+        }
+    }
+    if !transfers.is_empty() {
+        tracing::debug!("Received some transfers!! {transfers:#?}");
+    }
+
+    let confirmed_received: u64 = transfers
+        .iter()
+        .filter(|t| !t["locked"].as_bool().unwrap_or(true))
+        .map(|t| t["amount"].as_u64().unwrap_or(0))
+        .sum();
+    let total_received: u64 = transfers
+        .iter()
+        .map(|t| t["amount"].as_u64().unwrap_or(0))
+        .sum();
+    tracing::debug!("Confirmed: {confirmed_received}");
+    tracing::debug!("Confirmed + unconfirmed: {total_received}");
+    let complete = u128::from(confirmed_received) >= expected_amount;
+
+    match complete {
+        false => tracing::debug!("not enough confirmed"),
+        true => tracing::debug!("yay, enough confirmed"),
+    }
+    Ok(u128::from(confirmed_received) >= expected_amount)
+}

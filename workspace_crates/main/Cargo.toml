@@ -1,0 +1,35 @@
+[package]
+name = "main"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+dotenvy = { workspace = true }
+server = { workspace = true }
+sqlx = { workspace = true }
+git-version = { workspace = true }
+app_executable_version = { workspace = true }
+strum = { workspace = true }
+anyhow = { workspace = true }
+payment_system_structs = { workspace = true }
+derive_more = { workspace = true }
+reqwest = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+cryptocurrencies_stuff = { workspace = true }
+tokio-util = { workspace = true }
+bitcoin = { workspace = true }
+outscript = "0.2.7"
+bip39 = "3.0.0"
+hex = "0.4.3"
+ripemd = "0.2.0"
+sha2 = "0.11.1"
+bech32 = "0.12.0"
+thiserror = "2.0.21"
+
+
+[dev-dependencies]
+test-log = {workspace=true}
