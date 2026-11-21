@@ -59,6 +59,16 @@ pub enum PaymentMethod {
     #[strum(serialize = "nano", serialize = "xno")]
     Nano,
 }
+impl PaymentMethod {
+    pub const fn ticker(&self) -> &'static str {
+        match self {
+            Self::Litecoin => "LTC",
+            Self::Monero => "XMR",
+            Self::Nano => "XNO",
+        }
+    }
+}
+
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct NewInvoiceRequest {
